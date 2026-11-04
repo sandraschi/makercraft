@@ -1,0 +1,27 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/makercraft-hal",
+    "crates/makercraft-core",
+    "crates/makercraft-mcp",
+    "crates/makercraft-app",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["Antigravity Craft Collective"]
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+tokio = { version = "1.43", features = ["full"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
+eframe = { version = "0.37", default-features = false, features = ["default_fonts", "wgpu"] }
+egui = "0.37"
+clap = { version = "4.5", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
+databasecraft-store = { path = "../databasecraft/crates/databasecraft-store" }
+databasecraft-core = { path = "../databasecraft/crates/databasecraft-core" }

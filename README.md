@@ -42,6 +42,17 @@ cargo test
 ./target/debug/makercraft-cli.exe estimate sample.gcode --profile printer
 ```
 
+## Status — does today / next week / non-goals
+
+**Does today:** 4-crate Rust workspace (HAL first); fabrication-bench
+positioning (Klipper/GRBL/bus-probe); 9 test fns.
+
+**Next week:** PRD (HAL traits, sim-first, safety/confirm gates, benchcraft
+boundary); toolpath fixture tests (model → G-code); toolpath-sim recipe.
+
+**Non-goals:** no hardware in CI (`sim` receipts); heaters/spindles/motion
+behind confirm gates.
+
 ## Lineage — the Storytold craft-app pattern
 
 Storytold ArtCraft ([storytold/artcraft](https://github.com/storytold/artcraft) — "the IDE for artists") was the starting point. The 16 craft apps in the Storytold stable each ship one binary that is both the human CLI and the agent MCP server (stdio), headless-first, with `run.json` + report artifacts. That modus operandi and harness is what this repo implements; the code here is independent, the pattern is shared.

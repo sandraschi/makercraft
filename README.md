@@ -1,6 +1,6 @@
 # MakerCraft
 
-**MakerCraft** is an ArtCraft-tier sovereign digital fabrication bench and instrument studio connecting 3D printers, CNC routers, and hardware protocol debuggers into a unified desktop and agentic interface.
+**MakerCraft** is an ArtCraft-tier local-first digital fabrication bench and instrument studio connecting 3D printers, CNC routers, and hardware protocol debuggers into a unified desktop and agentic interface.
 
 Features:
 - **Real G-code Parser**: Modal G0/G1, G90/G91 absolute/relative, G20/G21 units, G2/G3 arc notice, `;` + `(...)` comments.

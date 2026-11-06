@@ -8,6 +8,15 @@
 //! - 3D printer: Ender-3 class, Klipper/Moonraker, 220 x 220 x 250 mm
 //! - CNC router: 3018 class, GRBL 1.1h, 300 x 180 x 45 mm, 20k RPM spindle
 //! - Logic: Bus Pirate v4, 3.3 V pullups
+//!
+//! L1: transports (CLI/MCP/GUI) are forbidden from touching parsing or HAL
+//! directly. Everything routes through [`dispatch`] with typed [`Command`]
+//! params, so the MCP server is a thin frame around one function.
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
+#![deny(clippy::unimplemented)]
+#![deny(clippy::todo)]
 
 pub mod i18n;
 
@@ -497,5 +506,105 @@ impl MakerEngine {
     /// Motion segments for the 2D toolpath preview (no profile needed).
     pub fn preview_segments(gcode: &str) -> Result<ParsedToolpath, MakerError> {
         Ok(parse_toolpath(gcode)?.0)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Universal Command Bus (ArtCraft Layer 3): one typed enum + one dispatch fn.
+// CLI subcommands, MCP tools/call, and the egui GUI all execute this.
+// Never panics: failures become JSON values so transports never branch.
+// ---------------------------------------------------------------------------
+
+/// Canonical string IDs exposed over MCP `tools/list` and the CLI.
+pub const CMD_STATUS: &str = "status";
+pub const CMD_PRINTER_STATUS: &str = "printer.status";
+pub const CMD_CNC_STATUS: &str = "cnc.status";
+pub const CMD_BUS_PINS: &str = "bus.pins";
+pub const CMD_GCODE_LINT: &str = "gcode.lint";
+pub const CMD_GCODE_PREVIEW: &str = "gcode.preview";
+pub const CMD_GCODE_CHECK: &str = "gcode.check";
+pub const CMD_GCODE_ESTIMATE: &str = "gcode.estimate";
+
+/// Bounded command bus. New capability = new variant + dispatch arm + test.
+#[derive(Debug, Clone)]
+pub enum Command {
+    Status,
+    PrinterStatus,
+    CncStatus,
+    BusPins,
+    GcodeLint { gcode: String, profile: String },
+    GcodePreview { gcode: String },
+    GcodeCheck { gcode: String, profile: String },
+    GcodeEstimate { gcode: String, profile: String },
+}
+
+/// Resolve a profile name without panicking. Unknown => CNC default.
+#[must_use]
+pub fn pick_profile(name: &str) -> MachineProfile {
+    let lower = name.to_lowercase();
+    match lower.as_str() {
+        "printer" | "ender-3" | "ender3" | "ender_3" => MachineProfile::default_printer(),
+        _ => MachineProfile::default_cnc(),
+    }
+}
+
+fn encode_report(op: &str, result: Result<ToolpathLintReport, MakerError>) -> serde_json::Value {
+    match result {
+        Ok(report) => serde_json::to_value(&report)
+            .unwrap_or_else(|e| serde_json::json!({"error": format!("{op} encode: {e}")})),
+        Err(e) => serde_json::json!({"error": e.to_string()}),
+    }
+}
+
+/// Dispatch one command headlessly. Never panics.
+#[must_use]
+pub fn dispatch(cmd: Command) -> serde_json::Value {
+    match cmd {
+        Command::Status => serde_json::json!({
+            "app": "makercraft",
+            "version": env!("CARGO_PKG_VERSION"),
+            "mode": "pure-rust",
+            "reference_rig": MakerEngine::reference_rig(),
+            "commands": [
+                CMD_STATUS, CMD_PRINTER_STATUS, CMD_CNC_STATUS, CMD_BUS_PINS,
+                CMD_GCODE_LINT, CMD_GCODE_PREVIEW, CMD_GCODE_CHECK, CMD_GCODE_ESTIMATE,
+            ],
+        }),
+        Command::PrinterStatus => serde_json::to_value(MakerEngine::get_printer_status())
+            .unwrap_or_else(
+                |e| serde_json::json!({"error": format!("printer.status encode: {e}")}),
+            ),
+        Command::CncStatus => serde_json::to_value(MakerEngine::get_cnc_status())
+            .unwrap_or_else(|e| serde_json::json!({"error": format!("cnc.status encode: {e}")})),
+        Command::BusPins => serde_json::to_value(MakerEngine::get_bus_pins())
+            .unwrap_or_else(|e| serde_json::json!({"error": format!("bus.pins encode: {e}")})),
+        Command::GcodeLint { gcode, profile } => encode_report(
+            "gcode.lint",
+            MakerEngine::lint_gcode_with_profile(&gcode, &pick_profile(&profile)),
+        ),
+        Command::GcodeCheck { gcode, profile } => encode_report(
+            "gcode.check",
+            MakerEngine::lint_gcode_with_profile(&gcode, &pick_profile(&profile)),
+        ),
+        Command::GcodeEstimate { gcode, profile } => {
+            match MakerEngine::lint_gcode_with_profile(&gcode, &pick_profile(&profile)) {
+                Ok(report) => serde_json::json!({
+                    "profile": pick_profile(&profile).name,
+                    "segment_count": report.segment_count,
+                    "travel_distance_mm": report.travel_distance_mm,
+                    "estimated_minutes": report.estimated_minutes,
+                    "passes_safety": report.passes_safety,
+                    "errors": report.errors,
+                    "warnings": report.warnings,
+                }),
+                Err(e) => serde_json::json!({"error": e.to_string()}),
+            }
+        }
+        Command::GcodePreview { gcode } => match MakerEngine::preview_segments(&gcode) {
+            Ok(path) => serde_json::to_value(&path).unwrap_or_else(
+                |e| serde_json::json!({"error": format!("gcode.preview encode: {e}")}),
+            ),
+            Err(e) => serde_json::json!({"error": e.to_string()}),
+        },
     }
 }

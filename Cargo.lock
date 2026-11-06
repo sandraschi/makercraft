@@ -434,28 +434,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
 
 [[package]]
-name = "databasecraft-core"
-version = "0.5.0"
-dependencies = [
- "chrono",
- "databasecraft-store",
- "serde",
- "serde_json",
- "tokio",
- "uuid",
-]
-
-[[package]]
-name = "databasecraft-store"
-version = "0.5.0"
-dependencies = [
- "chrono",
- "rusqlite",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "dispatch"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1208,8 +1186,6 @@ name = "makercraft-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "databasecraft-core",
- "databasecraft-store",
  "makercraft-hal",
  "rusqlite",
  "serde",
@@ -1234,6 +1210,7 @@ name = "makercraft-mcp"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "clap",
  "makercraft-core",
  "makercraft-hal",
  "serde",
@@ -2460,11 +2437,6 @@ name = "uuid"
 version = "1.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a0e2d11620c50695fe12bbbfde96b3477fe606e7284c22d505c12ce51214514"
-dependencies = [
- "getrandom",
- "js-sys",
- "wasm-bindgen",
-]
 
 [[package]]
 name = "vcpkg"

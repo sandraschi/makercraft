@@ -233,7 +233,8 @@ impl eframe::App for MakerCraftApp {
                         .selected_text(label)
                         .show_ui(ui, |ui| {
                             for loc_item in makercraft_core::i18n::AppLocale::all() {
-                                let text = format!("{} {}", loc_item.flag(), loc_item.display_name());
+                                let text =
+                                    format!("{} {}", loc_item.flag(), loc_item.display_name());
                                 let _ = ui.selectable_value(&mut self.locale, *loc_item, text);
                             }
                         });

@@ -1,6 +1,12 @@
 # CHANGELOG — MakerCraft
 
-## 2026-11-06 — v2.1 USB bench instruments (in-repo, no benchcraft)
+## 2026-11-06 — GRBL probe hardened via grbl-mcp oracle
+
+- `cnc.probe` now drains the DTR-reset boot banner before asking, normalizes
+  `Hold:x`/`Door:x` sub-states, and reports `machine_pos`/`work_pos` plus
+  `$I` firmware identity (best-effort, never fails the probe).
+- Cross-checked against the `grbl-mcp 0.1.0` crate source (state table + MPos
+  parsing adopted; its `anyhow`/`unwrap`/motion-command architecture NOT adopted).
 
 - 2 new Commands/MCP tools (15 total): `scope.usb` (USBTMC `*IDN?` + Rigol
   waveform over `rusb`, Demo when missing) and `logic.usb` (sigrok-cli capture,

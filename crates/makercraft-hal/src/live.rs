@@ -126,6 +126,11 @@ pub fn cnc_probe(port_opt: Option<String>) -> Value {
         Ok(s) => s,
         Err(e) => return demo_cnc(&port, &format!("serial open failed: {e}")),
     };
+    // DTR open resets most 3018 controllers: drain the boot banner first
+    // (grbl-mcp oracle: ~2 s), then ask. Best-effort — the `?` below is
+    // the real gate.
+    let mut drain = [0u8; 512];
+    let _ = stream.read(&mut drain);
     if stream.write_all(b"?").is_err() {
         return demo_cnc(&port, "serial write failed");
     }
@@ -135,7 +140,30 @@ pub fn cnc_probe(port_opt: Option<String>) -> Value {
         Ok(n) => String::from_utf8_lossy(&buf[..n]).to_string(),
         Err(e) => return demo_cnc(&port, &format!("serial read failed/timeout: {e}")),
     };
+    if !raw.contains('<') {
+        return demo_cnc(
+            &port,
+            "no status report in reply (controller still booting?)",
+        );
+    }
     let state = parse_grbl_state(&raw);
+    let (mpos, wpos) = parse_grbl_positions(&raw);
+    // Best-effort firmware identity; a failed `$I` never fails the probe.
+    let mut info_buf = [0u8; 256];
+    let firmware = if stream.write_all(b"$I\n").is_ok() {
+        match stream.read(&mut info_buf) {
+            Ok(0) => String::new(),
+            Ok(n) => String::from_utf8_lossy(&info_buf[..n])
+                .lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
+                .collect::<Vec<_>>()
+                .join(" "),
+            Err(_) => String::new(),
+        }
+    } else {
+        String::new()
+    };
     let mock = HardwareAdapter::mock_grbl_cnc();
     json!({
         "live": true,
@@ -143,6 +171,9 @@ pub fn cnc_probe(port_opt: Option<String>) -> Value {
         "machine_type": "GrblCncRouter",
         "is_connected": true,
         "state": state,
+        "machine_pos": mpos.map(|(x, y, z)| vec![x, y, z]),
+        "work_pos": wpos.map(|(x, y, z)| vec![x, y, z]),
+        "firmware": firmware,
         "raw": raw,
         "spindle_rpm_fallback": mock.extruder_or_spindle_temp,
     })
@@ -150,14 +181,48 @@ pub fn cnc_probe(port_opt: Option<String>) -> Value {
 
 fn parse_grbl_state(raw: &str) -> String {
     let s = raw.trim();
-    if let Some(inner) = s.strip_prefix('<') {
-        let end = inner.find(['|', '>']).unwrap_or(inner.len());
-        let head = inner[..end].trim();
-        if !head.is_empty() {
-            return head.to_string();
+    let inner = s.strip_prefix('<').unwrap_or(s);
+    let end = inner.find(['|', '>']).unwrap_or(inner.len());
+    normalize_grbl_state(inner[..end].trim())
+}
+
+/// Normalize GRBL state + sub-states (`Hold:0`, `Door:3`) the way the
+/// firmware means them. Pure — cross-checked against the `grbl-mcp` oracle.
+fn normalize_grbl_state(s: &str) -> String {
+    let head = s.split(':').next().unwrap_or("");
+    match head {
+        "Idle" | "Run" | "Hold" | "Jog" | "Alarm" | "Door" | "Check" | "Home" | "Sleep" => {
+            head.to_string()
+        }
+        _ if head.is_empty() => "UNKNOWN".to_string(),
+        _ => s.to_string(),
+    }
+}
+
+/// A parsed XYZ triple, if the report carried one.
+type GrblPos = Option<(f64, f64, f64)>;
+
+/// Extract `MPos:` and `WPos:` triples from a `<...>` status report. Pure.
+fn parse_grbl_positions(raw: &str) -> (GrblPos, GrblPos) {
+    let inner = raw.trim().strip_prefix('<').unwrap_or(raw.trim());
+    let mut mpos = None;
+    let mut wpos = None;
+    for field in inner.split(['|', '>']) {
+        if let Some(p) = field.strip_prefix("MPos:") {
+            mpos = parse_triple(p);
+        } else if let Some(p) = field.strip_prefix("WPos:") {
+            wpos = parse_triple(p);
         }
     }
-    "UNKNOWN".to_string()
+    (mpos, wpos)
+}
+
+fn parse_triple(s: &str) -> Option<(f64, f64, f64)> {
+    let mut it = s.split(',');
+    let x: f64 = it.next()?.trim().parse().ok()?;
+    let y: f64 = it.next()?.trim().parse().ok()?;
+    let z: f64 = it.next()?.trim().parse().ok()?;
+    Some((x, y, z))
 }
 
 fn demo_cnc(port: &str, error: &str) -> Value {
@@ -393,7 +458,20 @@ mod tests {
     fn grbl_state_parses_idle() {
         assert_eq!(parse_grbl_state("<Idle|MPos:0,0,5.0|FS:0,0>"), "Idle");
         assert_eq!(parse_grbl_state(""), "UNKNOWN");
-        assert_eq!(parse_grbl_state("garbage"), "UNKNOWN");
+        assert_eq!(parse_grbl_state("garbage"), "garbage");
+        // Sub-states normalize the way the firmware means them.
+        assert_eq!(parse_grbl_state("<Hold:1|MPos:0,0,0>"), "Hold");
+        assert_eq!(parse_grbl_state("<Door:3|MPos:0,0,0>"), "Door");
+    }
+
+    #[test]
+    fn grbl_positions_parse() {
+        let (m, w) = parse_grbl_positions("<Run|MPos:10.5,-2.0,5.0|WPos:1.0,2.0,3.0>");
+        assert_eq!(m, Some((10.5, -2.0, 5.0)));
+        assert_eq!(w, Some((1.0, 2.0, 3.0)));
+        let (m2, w2) = parse_grbl_positions("<Idle|MPos:0,0,0>");
+        assert!(m2.is_some());
+        assert_eq!(w2, None);
     }
 
     #[test]

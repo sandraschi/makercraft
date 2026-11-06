@@ -3,12 +3,14 @@
 //! Provides unified protocol interfaces for Klipper / Moonraker 3D printers,
 //! GRBL CNC milling routers, and Bus Pirate / Logic Analyzer instrumentation.
 //!
-//! L1 HAL only: mock oracles today, live Moonraker/serial bridges land here (v2).
+//! L1 HAL only: mock oracles plus v2 read-only live bridges (see [`live`]).
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 #![deny(clippy::unimplemented)]
 #![deny(clippy::todo)]
+
+pub mod live;
 
 use serde::{Deserialize, Serialize};
 

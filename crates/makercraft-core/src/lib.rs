@@ -524,6 +524,11 @@ pub const CMD_GCODE_LINT: &str = "gcode.lint";
 pub const CMD_GCODE_PREVIEW: &str = "gcode.preview";
 pub const CMD_GCODE_CHECK: &str = "gcode.check";
 pub const CMD_GCODE_ESTIMATE: &str = "gcode.estimate";
+pub const CMD_PRINTER_LIVE: &str = "printer.live";
+pub const CMD_CNC_PROBE: &str = "cnc.probe";
+pub const CMD_BUS_PROBE: &str = "bus.probe";
+pub const CMD_SCOPE_IDN: &str = "scope.idn";
+pub const CMD_LOGIC_CAPTURE: &str = "logic.capture";
 
 /// Bounded command bus. New capability = new variant + dispatch arm + test.
 #[derive(Debug, Clone)]
@@ -532,10 +537,38 @@ pub enum Command {
     PrinterStatus,
     CncStatus,
     BusPins,
-    GcodeLint { gcode: String, profile: String },
-    GcodePreview { gcode: String },
-    GcodeCheck { gcode: String, profile: String },
-    GcodeEstimate { gcode: String, profile: String },
+    GcodeLint {
+        gcode: String,
+        profile: String,
+    },
+    GcodePreview {
+        gcode: String,
+    },
+    GcodeCheck {
+        gcode: String,
+        profile: String,
+    },
+    GcodeEstimate {
+        gcode: String,
+        profile: String,
+    },
+    PrinterLive {
+        url: String,
+    },
+    CncProbe {
+        port: String,
+    },
+    BusProbe {
+        port: String,
+    },
+    ScopeIdn {
+        addr: String,
+    },
+    LogicCapture {
+        port: String,
+        hz: u32,
+        samples: usize,
+    },
 }
 
 /// Resolve a profile name without panicking. Unknown => CNC default.
@@ -568,6 +601,7 @@ pub fn dispatch(cmd: Command) -> serde_json::Value {
             "commands": [
                 CMD_STATUS, CMD_PRINTER_STATUS, CMD_CNC_STATUS, CMD_BUS_PINS,
                 CMD_GCODE_LINT, CMD_GCODE_PREVIEW, CMD_GCODE_CHECK, CMD_GCODE_ESTIMATE,
+                CMD_PRINTER_LIVE, CMD_CNC_PROBE, CMD_BUS_PROBE, CMD_SCOPE_IDN, CMD_LOGIC_CAPTURE,
             ],
         }),
         Command::PrinterStatus => serde_json::to_value(MakerEngine::get_printer_status())
@@ -606,5 +640,36 @@ pub fn dispatch(cmd: Command) -> serde_json::Value {
             ),
             Err(e) => serde_json::json!({"error": e.to_string()}),
         },
+        Command::PrinterLive { url } => {
+            makercraft_hal::live::printer_live(if url.trim().is_empty() {
+                None
+            } else {
+                Some(url)
+            })
+        }
+        Command::CncProbe { port } => makercraft_hal::live::cnc_probe(if port.trim().is_empty() {
+            None
+        } else {
+            Some(port)
+        }),
+        Command::BusProbe { port } => makercraft_hal::live::bus_probe(if port.trim().is_empty() {
+            None
+        } else {
+            Some(port)
+        }),
+        Command::ScopeIdn { addr } => makercraft_hal::live::scope_idn(if addr.trim().is_empty() {
+            None
+        } else {
+            Some(addr)
+        }),
+        Command::LogicCapture { port, hz, samples } => makercraft_hal::live::logic_capture(
+            if port.trim().is_empty() {
+                None
+            } else {
+                Some(port)
+            },
+            hz,
+            samples,
+        ),
     }
 }

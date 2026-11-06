@@ -16,14 +16,27 @@ local-first bench lints a toolpath *before* it touches stock.
   ceiling, feedrate warnings. `passes_safety` is real; `check` exits 2 for CI.
 - **Estimate:** travel distance + time from feedrates for job planning.
 - **Preview:** 2D top-down XY (feed vs rapid), bed outline, start/end dots.
-- **Machines:** Klipper + GRBL + Bus Pirate telemetry (mock oracles today).
-- **Agent surface:** 8 MCP tools over stdio, same `dispatch` as the CLI.
+- **Machines:** Klipper (live via Moonraker or Demo) + GRBL (`?` probe or Demo)
+  + Bus Pirate identity (or Demo) + SCPI `*IDN?` bench instruments + 4-pin logic sampler.
+- **Agent surface:** 13 MCP tools over stdio, same `dispatch` as the CLI.
 
-## HAL traits (v2 target)
+## HAL traits (v2 — landed 2026-11-06)
 
-- `KlipperBridge`: Moonraker HTTP (`printer.info`, `print.pause/cancel`, temp targets) + `Vendor::Demo` oracle.
-- `GrblBridge`: serial `?` status + `$H`/`$X` interlock + `Vendor::Demo` oracle. No motion without confirm gate.
-- `BusPirateBridge`: pin levels + pullups over serial; read-only, no drive.
+- `printer.live`: Moonraker HTTP (`/server/info` + `/printer/info`, 3 s timeout,
+  `MOONRAKER_URL` default `http://127.0.0.1:7125`) with Demo fallback. Toolhead
+  XYZ stays the Demo oracle until `/printer/objects` lands (v2.1).
+- `cnc.probe`: GRBL `?` status over serial 115200 8N1 (`GRBL_PORT`), read-only,
+  Demo fallback. Never sends motion.
+- `bus.probe`: Bus Pirate text-mode `i` identity (`BUS_PIRATE_PORT`), read-only,
+  Demo fallback. Binary-mode ADC lands in v3.
+- `scope.idn`: generic SCPI `*IDN?` over TCP — covers oscilloscopes, bench PSUs,
+  DMMs with LAN (`SCOPE_ADDR=ip:5025`), Demo 8-sample sine when unreachable.
+- `logic.capture`: 4-pin (MOSI/MISO/CLK/CS) pattern sampler, `hz`/`samples`
+  clamped, `samples_source: demo` until SUMP firmware lands (v3).
+
+Bench hardware that is NOT in scope: Saleae/sigrok USB analyzers, USBTMC/GPIB
+oscilloscope waveform fetch, spectrum analyzers. They want a `benchcraft`
+neighbor repo; MakerCraft only speaks SCPI `*IDN?` until someone files that issue.
 
 ## Sim-first
 

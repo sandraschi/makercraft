@@ -114,7 +114,10 @@ fn demo_printer(url: &str, error: &str) -> Value {
 pub fn cnc_probe(port_opt: Option<String>) -> Value {
     let port = resolve_opt(port_opt, "GRBL_PORT");
     if port.is_empty() {
-        return demo_cnc("", "no port given (set GRBL_PORT, e.g. COM4 or /dev/ttyUSB0)");
+        return demo_cnc(
+            "",
+            "no port given (set GRBL_PORT, e.g. COM4 or /dev/ttyUSB0)",
+        );
     }
     let opened = serialport::new(port.clone(), 115_200)
         .timeout(Duration::from_millis(SERIAL_TIMEOUT_MS))
@@ -398,7 +401,11 @@ mod tests {
         let v = logic_capture(Some("".to_string()), 0, 9999);
         assert_eq!(v.get("hz").and_then(|x| x.as_u64()), Some(1));
         assert_eq!(v.get("samples").and_then(|x| x.as_u64()), Some(256));
-        let ch = v.get("channels").and_then(|c| c.as_object()).cloned().unwrap_or_default();
+        let ch = v
+            .get("channels")
+            .and_then(|c| c.as_object())
+            .cloned()
+            .unwrap_or_default();
         assert_eq!(ch.len(), 4);
     }
 }

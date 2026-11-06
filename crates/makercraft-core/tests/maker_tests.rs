@@ -109,7 +109,7 @@ fn test_dispatch_status_lists_all_commands() {
         .and_then(|c| c.as_array())
         .cloned()
         .unwrap_or_default();
-    assert_eq!(cmds.len(), 8);
+    assert_eq!(cmds.len(), 13);
 }
 
 #[test]
@@ -139,5 +139,33 @@ fn test_pick_profile_aliases() {
     assert_eq!(
         pick_profile("nope").name,
         "3018 class (GRBL 1.1h)".to_string()
+    );
+}
+
+#[test]
+fn test_dispatch_live_demos_without_hardware() {
+    let printer = dispatch(Command::PrinterLive {
+        url: "http://127.0.0.1:9".to_string(),
+    });
+    assert_eq!(printer.get("live").and_then(|v| v.as_bool()), Some(false));
+    let cnc = dispatch(Command::CncProbe {
+        port: "DEMO_DOES_NOT_EXIST_000".to_string(),
+    });
+    assert_eq!(cnc.get("live").and_then(|v| v.as_bool()), Some(false));
+    let scope = dispatch(Command::ScopeIdn {
+        addr: "127.0.0.1:9".to_string(),
+    });
+    assert_eq!(scope.get("live").and_then(|v| v.as_bool()), Some(false));
+    let logic = dispatch(Command::LogicCapture {
+        port: String::new(),
+        hz: 1000,
+        samples: 8,
+    });
+    assert_eq!(
+        logic
+            .get("channels")
+            .and_then(|c| c.as_object())
+            .map(|o| o.len()),
+        Some(4)
     );
 }

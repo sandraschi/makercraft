@@ -57,6 +57,35 @@ enum Commands {
     },
     /// Preview motion segments for a G-code file (JSON)
     Preview { path: String },
+    /// Live Klipper telemetry via Moonraker (Demo oracle when unreachable)
+    PrinterLive {
+        #[arg(long, default_value = "")]
+        url: String,
+    },
+    /// Probe a GRBL controller over serial with `?` (read-only, Demo when missing)
+    CncProbe {
+        #[arg(long, default_value = "")]
+        port: String,
+    },
+    /// Identify a Bus Pirate over serial (read-only, Demo when missing)
+    BusProbe {
+        #[arg(long, default_value = "")]
+        port: String,
+    },
+    /// Identify a SCPI instrument over TCP with `*IDN?` (Demo when unreachable)
+    ScopeIdn {
+        #[arg(long, default_value = "")]
+        addr: String,
+    },
+    /// Sample 4 logic pins (Demo pattern until SUMP lands in v3)
+    LogicCapture {
+        #[arg(long, default_value = "")]
+        port: String,
+        #[arg(long, default_value_t = 1000)]
+        hz: u32,
+        #[arg(long, default_value_t = 32)]
+        samples: usize,
+    },
     /// Run the MCP 2024-11-05 stdio server (stdout = pure JSON-RPC)
     Mcp,
 }
@@ -90,7 +119,12 @@ pub fn tools_list() -> Value {
             {"name": "gcode_lint", "description": "Lint G-code: envelope + plunge + temp + feed gates. Args: gcode, profile (cnc|printer)", "inputSchema": {"type": "object", "properties": {"gcode": {"type": "string"}, "profile": {"type": "string"}}, "required": ["gcode"]}},
             {"name": "gcode_preview", "description": "Motion segments for 2D preview. Args: gcode", "inputSchema": {"type": "object", "properties": {"gcode": {"type": "string"}}, "required": ["gcode"]}},
             {"name": "gcode_check", "description": "Lint G-code for CI (same as lint, machine-readable passes_safety). Args: gcode, profile", "inputSchema": {"type": "object", "properties": {"gcode": {"type": "string"}, "profile": {"type": "string"}}, "required": ["gcode"]}},
-            {"name": "gcode_estimate", "description": "Time + travel estimate. Args: gcode, profile", "inputSchema": {"type": "object", "properties": {"gcode": {"type": "string"}, "profile": {"type": "string"}}, "required": ["gcode"]}}
+            {"name": "gcode_estimate", "description": "Time + travel estimate. Args: gcode, profile", "inputSchema": {"type": "object", "properties": {"gcode": {"type": "string"}, "profile": {"type": "string"}}, "required": ["gcode"]}},
+            {"name": "printer_live", "description": "Live Klipper telemetry via Moonraker (Demo when unreachable). Args: url (default MOONRAKER_URL or 127.0.0.1:7125)", "inputSchema": {"type": "object", "properties": {"url": {"type": "string"}}}},
+            {"name": "cnc_probe", "description": "Probe GRBL with `?` over serial, read-only (Demo when missing). Args: port (default GRBL_PORT)", "inputSchema": {"type": "object", "properties": {"port": {"type": "string"}}}},
+            {"name": "bus_probe", "description": "Identify Bus Pirate over serial, read-only (Demo when missing). Args: port (default BUS_PIRATE_PORT)", "inputSchema": {"type": "object", "properties": {"port": {"type": "string"}}}},
+            {"name": "scope_idn", "description": "SCPI *IDN? over TCP for scopes/PSUs/DMMs (Demo when unreachable). Args: addr (default SCOPE_ADDR, ip:port)", "inputSchema": {"type": "object", "properties": {"addr": {"type": "string"}}}},
+            {"name": "logic_capture", "description": "4-pin logic pattern (Demo until SUMP v3). Args: port, hz, samples", "inputSchema": {"type": "object", "properties": {"port": {"type": "string"}, "hz": {"type": "integer"}, "samples": {"type": "integer"}}}}
         ]
     })
 }
@@ -100,6 +134,20 @@ fn arg_str(args: &Value, key: &str) -> String {
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string()
+}
+
+fn arg_u32(args: &Value, key: &str, fallback: u32) -> u32 {
+    args.get(key)
+        .and_then(|v| v.as_u64())
+        .and_then(|v| u32::try_from(v).ok())
+        .unwrap_or(fallback)
+}
+
+fn arg_usize(args: &Value, key: &str, fallback: usize) -> usize {
+    args.get(key)
+        .and_then(|v| v.as_u64())
+        .and_then(|v| usize::try_from(v).ok())
+        .unwrap_or(fallback)
 }
 
 fn content_text(result: &Value) -> String {
@@ -144,6 +192,23 @@ pub fn call_tool(name: &str, args: &Value) -> Value {
         "gcode_estimate" | "gcode.estimate" => run(Command::GcodeEstimate {
             gcode: arg_str(args, "gcode"),
             profile,
+        }),
+        "printer_live" | "printer.live" => run(Command::PrinterLive {
+            url: arg_str(args, "url"),
+        }),
+        "cnc_probe" | "cnc.probe" => run(Command::CncProbe {
+            port: arg_str(args, "port"),
+        }),
+        "bus_probe" | "bus.probe" => run(Command::BusProbe {
+            port: arg_str(args, "port"),
+        }),
+        "scope_idn" | "scope.idn" => run(Command::ScopeIdn {
+            addr: arg_str(args, "addr"),
+        }),
+        "logic_capture" | "logic.capture" => run(Command::LogicCapture {
+            port: arg_str(args, "port"),
+            hz: arg_u32(args, "hz", 1000),
+            samples: arg_usize(args, "samples", 32),
         }),
         other => json!({"error": format!("unknown tool: {other}")}),
     };
@@ -228,8 +293,10 @@ fn run_mcp_stdio() {
     }
 }
 
-#[tokio::main]
-async fn main() {
+/// Live calls use sync I/O with timeouts (GUI-paint safe), so this binary
+/// stays a plain sync `main`: `reqwest::blocking` panics inside a Tokio
+/// runtime, and nothing here needs async.
+fn main() {
     let cli = Cli::parse();
     match cli.command {
         Commands::Status => show(&run(Command::Status)),
@@ -273,6 +340,13 @@ async fn main() {
                 gcode: read_or_sample(&path),
             }));
         }
+        Commands::PrinterLive { url } => show(&run(Command::PrinterLive { url })),
+        Commands::CncProbe { port } => show(&run(Command::CncProbe { port })),
+        Commands::BusProbe { port } => show(&run(Command::BusProbe { port })),
+        Commands::ScopeIdn { addr } => show(&run(Command::ScopeIdn { addr })),
+        Commands::LogicCapture { port, hz, samples } => {
+            show(&run(Command::LogicCapture { port, hz, samples }));
+        }
         Commands::Mcp => run_mcp_stdio(),
     }
 }
@@ -282,14 +356,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn catalog_lists_eight_tools() {
+    fn catalog_lists_thirteen_tools() {
         let catalog = tools_list();
         let tools = catalog
             .get("tools")
             .and_then(|t| t.as_array())
             .cloned()
             .unwrap_or_default();
-        assert_eq!(tools.len(), 8);
+        assert_eq!(tools.len(), 13);
     }
 
     #[test]
@@ -331,5 +405,24 @@ mod tests {
             direct.get("app").and_then(|v| v.as_str()),
             Some("makercraft")
         );
+    }
+
+    #[test]
+    fn live_tools_demo_without_hardware() {
+        for (tool, args) in [
+            ("printer_live", json!({"url": "http://127.0.0.1:9"})),
+            ("cnc_probe", json!({"port": "DEMO_DOES_NOT_EXIST_000"})),
+            ("bus_probe", json!({"port": "DEMO_DOES_NOT_EXIST_000"})),
+            ("scope_idn", json!({"addr": "127.0.0.1:9"})),
+            (
+                "logic_capture",
+                json!({"port": "", "hz": 1000, "samples": 8}),
+            ),
+        ] {
+            let text = content_text(&call_tool(tool, &args));
+            assert!(text.contains("\"live\""), "{tool} must report live flag");
+        }
+        let bad_scope = content_text(&call_tool("scope_idn", &json!({"addr": "127.0.0.1:9"})));
+        assert!(bad_scope.contains("\"live\": false"));
     }
 }

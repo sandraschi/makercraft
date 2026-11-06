@@ -13,3 +13,4 @@ tokio.workspace = true
 chrono.workspace = true
 reqwest.workspace = true
 serialport.workspace = true
+rusb.workspace = true

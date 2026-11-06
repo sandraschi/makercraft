@@ -11,6 +11,7 @@
 #![deny(clippy::todo)]
 
 pub mod live;
+pub mod usb;
 
 use serde::{Deserialize, Serialize};
 

@@ -3,3 +3,5 @@
 *.dbcraft
 *.bak
 *.exe
+# Kibitzer side-channel (gitignored, polled by Antigravity, refreshed 2x/day)
+KIBITZ.md

@@ -66,10 +66,30 @@ impl HardwareAdapter {
 
     pub fn mock_bus_pirate() -> Vec<BusPiratePinState> {
         vec![
-            BusPiratePinState { pin_name: "MOSI".to_string(), is_high: true, pullup_enabled: true, voltage_v: 3.3 },
-            BusPiratePinState { pin_name: "MISO".to_string(), is_high: false, pullup_enabled: true, voltage_v: 0.1 },
-            BusPiratePinState { pin_name: "CLK".to_string(), is_high: false, pullup_enabled: false, voltage_v: 0.0 },
-            BusPiratePinState { pin_name: "CS".to_string(), is_high: true, pullup_enabled: false, voltage_v: 3.3 },
+            BusPiratePinState {
+                pin_name: "MOSI".to_string(),
+                is_high: true,
+                pullup_enabled: true,
+                voltage_v: 3.3,
+            },
+            BusPiratePinState {
+                pin_name: "MISO".to_string(),
+                is_high: false,
+                pullup_enabled: true,
+                voltage_v: 0.1,
+            },
+            BusPiratePinState {
+                pin_name: "CLK".to_string(),
+                is_high: false,
+                pullup_enabled: false,
+                voltage_v: 0.0,
+            },
+            BusPiratePinState {
+                pin_name: "CS".to_string(),
+                is_high: true,
+                pullup_enabled: false,
+                voltage_v: 3.3,
+            },
         ]
     }
 }

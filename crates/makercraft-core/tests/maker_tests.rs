@@ -109,7 +109,7 @@ fn test_dispatch_status_lists_all_commands() {
         .and_then(|c| c.as_array())
         .cloned()
         .unwrap_or_default();
-    assert_eq!(cmds.len(), 13);
+    assert_eq!(cmds.len(), 15);
 }
 
 #[test]
@@ -168,4 +168,21 @@ fn test_dispatch_live_demos_without_hardware() {
             .map(|o| o.len()),
         Some(4)
     );
+}
+
+#[test]
+fn test_dispatch_usb_demos_without_hardware() {
+    let scope = dispatch(Command::ScopeUsb {
+        vid: 0xFFFF,
+        pid: 0xFFFF,
+    });
+    assert_eq!(scope.get("live").and_then(|v| v.as_bool()), Some(false));
+    let logic = dispatch(Command::LogicUsb {
+        driver: "saleae-logic8".to_string(),
+        hz: 1000,
+        samples: 8,
+        cli: "DEMO_NO_SUCH_BIN_000".to_string(),
+    });
+    assert_eq!(logic.get("live").and_then(|v| v.as_bool()), Some(false));
+    assert_eq!(logic.get("engine").and_then(|v| v.as_str()), Some("down"));
 }

@@ -80,8 +80,7 @@ pub fn parse_in_reply(buf: &[u8]) -> Result<(u8, usize), String> {
     if buf[1] != 255 - buf[2] {
         return Err("bTag/bTagInverse mismatch (stale transfer?)".to_string());
     }
-    let len =
-        u32::from_le_bytes([buf[4], buf[5], buf[6], buf[7]]) as usize;
+    let len = u32::from_le_bytes([buf[4], buf[5], buf[6], buf[7]]) as usize;
     Ok((buf[1], len))
 }
 
@@ -159,9 +158,7 @@ fn find_usbtmc(vid: u16, pid: u16) -> Result<UsbTmc, String> {
         .map_err(|e| format!("config descriptor: {e}"))?;
     for iface in cfg.interfaces() {
         for desc in iface.descriptors() {
-            if desc.class_code() == USBTMC_CLASS
-                && desc.sub_class_code() == USBTMC_SUBCLASS
-            {
+            if desc.class_code() == USBTMC_CLASS && desc.sub_class_code() == USBTMC_SUBCLASS {
                 let mut out = None;
                 let mut inp = None;
                 for ep in desc.endpoint_descriptors() {
@@ -202,10 +199,7 @@ fn next_tag(t: &mut UsbTmc) -> u8 {
 fn write_all(t: &UsbTmc, data: &[u8]) -> Result<(), String> {
     let mut off = 0;
     while off < data.len() {
-        match t
-            .handle
-            .write_bulk(t.ep_out, &data[off..], BULK_TIMEOUT)
-        {
+        match t.handle.write_bulk(t.ep_out, &data[off..], BULK_TIMEOUT) {
             Ok(0) => return Err("bulk write returned 0".to_string()),
             Ok(n) => off += n,
             Err(e) => return Err(format!("bulk write: {e}")),
@@ -455,12 +449,12 @@ pub fn parse_sigrok_csv(text: &str) -> Result<serde_json::Map<String, Value>, St
     Ok(map)
 }
 
-fn demo_logic_usb(engine: &str, error: &str, command: &str) -> Value {
+fn demo_logic_usb(engine: &str, hz: u32, samples: usize, error: &str, command: &str) -> Value {
     let mut channels = serde_json::Map::new();
     for (ch, name) in ["MOSI", "MISO", "CLK", "CS"].iter().enumerate() {
-        let mut seq = Vec::with_capacity(32);
+        let mut seq = Vec::with_capacity(samples);
         let mut i = 0;
-        while i < 32 {
+        while i < samples {
             seq.push(((i + ch * 2) % 4) < 2);
             i += 1;
         }
@@ -470,8 +464,8 @@ fn demo_logic_usb(engine: &str, error: &str, command: &str) -> Value {
         "live": false,
         "engine": engine,
         "command": command,
-        "hz": 1000,
-        "samples": 32,
+        "hz": hz,
+        "samples": samples,
         "channels": channels,
         "samples_source": "demo (sigrok engine DOWN — see error)",
         "error": error,
@@ -482,12 +476,7 @@ fn demo_logic_usb(engine: &str, error: &str, command: &str) -> Value {
 /// Capture with a USB logic analyzer via sigrok-cli.
 /// Empty driver returns usage (no subprocess); missing binary returns DOWN.
 #[must_use]
-pub fn logic_usb(
-    driver: Option<String>,
-    hz: u32,
-    samples: usize,
-    cli: Option<String>,
-) -> Value {
+pub fn logic_usb(driver: Option<String>, hz: u32, samples: usize, cli: Option<String>) -> Value {
     let hz = hz.clamp(1, 50_000_000);
     let samples = samples.clamp(1, 1_000_000);
     let cli_bin = sigrok_cli(cli);
@@ -497,6 +486,8 @@ pub fn logic_usb(
         Err(e) => {
             return demo_logic_usb(
                 "down",
+                hz,
+                samples,
                 &format!("sigrok engine DOWN: {e}"),
                 &format!("{cli_bin} --version"),
             );
@@ -539,11 +530,13 @@ pub fn logic_usb(
             }),
             Err(e) => demo_logic_usb(
                 &version,
+                hz,
+                samples,
                 &format!("csv parse failed ({e}); command was `{command}`"),
                 &command,
             ),
         },
-        Err(e) => demo_logic_usb(&version, &e, &command),
+        Err(e) => demo_logic_usb(&version, hz, samples, &e, &command),
     }
 }
 

@@ -17,8 +17,24 @@ local-first bench lints a toolpath *before* it touches stock.
 - **Estimate:** travel distance + time from feedrates for job planning.
 - **Preview:** 2D top-down XY (feed vs rapid), bed outline, start/end dots.
 - **Machines:** Klipper (live via Moonraker or Demo) + GRBL (`?` probe or Demo)
-  + Bus Pirate identity (or Demo) + SCPI `*IDN?` bench instruments + 4-pin logic sampler.
-- **Agent surface:** 13 MCP tools over stdio, same `dispatch` as the CLI.
+  + Bus Pirate identity (or Demo) + SCPI `*IDN?` bench instruments
+  + USB scopes via USBTMC (or Demo) + USB logic via sigrok-cli (or DOWN)
+  + 4-pin logic sampler.
+- **Agent surface:** 15 MCP tools over stdio, same `dispatch` as the CLI.
+
+## Bench hardware lives here (no benchcraft repo)
+
+One bench, one binary. USB oscilloscopes and USB analyzers are MakerCraft
+HAL drivers, not a new repo: the Command bus scales by variant, and a second
+repo would duplicate the GUI, CLI, MCP framing, and reference rig for zero
+separation benefit. The `benchcraft` name is retired — if it ever returns,
+it will be for something that is not a bench instrument (e.g. inventory).
+
+Windows USB prerequisite: every USB instrument needs a WinUSB driver —
+install with Zadig per device (Rigol 1ab1:04ce, Siglent f4ec:*). Without it
+`rusb` cannot open the device and `scope.usb` says so in `"error"`.
+
+## HAL traits (v2.1 — landed 2026-11-06)
 
 ## HAL traits (v2 — landed 2026-11-06)
 
@@ -33,6 +49,14 @@ local-first bench lints a toolpath *before* it touches stock.
   DMMs with LAN (`SCOPE_ADDR=ip:5025`), Demo 8-sample sine when unreachable.
 - `logic.capture`: 4-pin (MOSI/MISO/CLK/CS) pattern sampler, `hz`/`samples`
   clamped, `samples_source: demo` until SUMP firmware lands (v3).
+- `scope.usb`: USBTMC `*IDN?` + best-effort Rigol `:WAV:PRE?`/`:WAV:DATA?`
+  waveform in volts (IEEE 488.2 block parsed, preamble-scaled), Demo when the
+  device is missing. Hand-rolled on `rusb`; the `usbtmc 0.1.0` crate is an
+  empty stub and is deliberately NOT a dependency.
+- `logic.usb`: sigrok-cli subprocess capture (`--driver`, `--config
+  samplerate=`, `--samples`, `--output-format csv` parsed to channels).
+  Missing binary = `engine: down` receipt with labeled Demo pattern, never a
+  fake green. Empty driver = usage hint.
 
 Bench hardware that is NOT in scope: Saleae/sigrok USB analyzers, USBTMC/GPIB
 oscilloscope waveform fetch, spectrum analyzers. They want a `benchcraft`

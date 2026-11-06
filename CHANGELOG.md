@@ -1,6 +1,14 @@
 # CHANGELOG — MakerCraft
 
-## 2026-11-06 — v2 live bridges (read-only) + bench instruments
+## 2026-11-06 — v2.1 USB bench instruments (in-repo, no benchcraft)
+
+- 2 new Commands/MCP tools (15 total): `scope.usb` (USBTMC `*IDN?` + Rigol
+  waveform over `rusb`, Demo when missing) and `logic.usb` (sigrok-cli capture,
+  `engine: down` receipt when the binary is absent — Goliath has none).
+- Decision: USB scopes/analyzers live in MakerCraft HAL. No `benchcraft` repo:
+  one bench, one binary; a split would duplicate GUI+CLI+MCP for no seam benefit.
+- Windows USB = WinUSB via Zadig per device, else `scope.usb` names the fix.
+- 36 tests green (14 core + 15 hal + 7 mcp); `usbtmc 0.1.0` rejected (empty stub).
 
 - 5 new Commands/MCP tools (13 total): `printer.live` (Moonraker HTTP),
   `cnc.probe` (GRBL `?` serial), `bus.probe` (Bus Pirate identity),

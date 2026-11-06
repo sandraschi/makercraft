@@ -86,6 +86,24 @@ enum Commands {
         #[arg(long, default_value_t = 32)]
         samples: usize,
     },
+    /// Identify a USB scope via USBTMC (Demo when missing; needs WinUSB via Zadig)
+    ScopeUsb {
+        #[arg(long, default_value_t = 0)]
+        vid: u16,
+        #[arg(long, default_value_t = 0)]
+        pid: u16,
+    },
+    /// Capture with a USB logic analyzer via sigrok-cli (DOWN receipt when absent)
+    LogicUsb {
+        #[arg(long, default_value = "")]
+        driver: String,
+        #[arg(long, default_value_t = 1000)]
+        hz: u32,
+        #[arg(long, default_value_t = 32)]
+        samples: usize,
+        #[arg(long, default_value = "")]
+        cli: String,
+    },
     /// Run the MCP 2024-11-05 stdio server (stdout = pure JSON-RPC)
     Mcp,
 }
@@ -124,7 +142,9 @@ pub fn tools_list() -> Value {
             {"name": "cnc_probe", "description": "Probe GRBL with `?` over serial, read-only (Demo when missing). Args: port (default GRBL_PORT)", "inputSchema": {"type": "object", "properties": {"port": {"type": "string"}}}},
             {"name": "bus_probe", "description": "Identify Bus Pirate over serial, read-only (Demo when missing). Args: port (default BUS_PIRATE_PORT)", "inputSchema": {"type": "object", "properties": {"port": {"type": "string"}}}},
             {"name": "scope_idn", "description": "SCPI *IDN? over TCP for scopes/PSUs/DMMs (Demo when unreachable). Args: addr (default SCOPE_ADDR, ip:port)", "inputSchema": {"type": "object", "properties": {"addr": {"type": "string"}}}},
-            {"name": "logic_capture", "description": "4-pin logic pattern (Demo until SUMP v3). Args: port, hz, samples", "inputSchema": {"type": "object", "properties": {"port": {"type": "string"}, "hz": {"type": "integer"}, "samples": {"type": "integer"}}}}
+            {"name": "logic_capture", "description": "4-pin logic pattern (Demo until SUMP v3). Args: port, hz, samples", "inputSchema": {"type": "object", "properties": {"port": {"type": "string"}, "hz": {"type": "integer"}, "samples": {"type": "integer"}}}},
+            {"name": "scope_usb", "description": "USB scope via USBTMC *IDN? + best-effort Rigol waveform (Demo when missing; needs WinUSB via Zadig). Args: vid, pid (decimals)", "inputSchema": {"type": "object", "properties": {"vid": {"type": "integer"}, "pid": {"type": "integer"}}}},
+            {"name": "logic_usb", "description": "USB logic analyzer via sigrok-cli (DOWN receipt when absent). Args: driver, hz, samples", "inputSchema": {"type": "object", "properties": {"driver": {"type": "string"}, "hz": {"type": "integer"}, "samples": {"type": "integer"}}}}
         ]
     })
 }
@@ -147,6 +167,13 @@ fn arg_usize(args: &Value, key: &str, fallback: usize) -> usize {
     args.get(key)
         .and_then(|v| v.as_u64())
         .and_then(|v| usize::try_from(v).ok())
+        .unwrap_or(fallback)
+}
+
+fn arg_u16(args: &Value, key: &str, fallback: u16) -> u16 {
+    args.get(key)
+        .and_then(|v| v.as_u64())
+        .and_then(|v| u16::try_from(v).ok())
         .unwrap_or(fallback)
 }
 
@@ -209,6 +236,16 @@ pub fn call_tool(name: &str, args: &Value) -> Value {
             port: arg_str(args, "port"),
             hz: arg_u32(args, "hz", 1000),
             samples: arg_usize(args, "samples", 32),
+        }),
+        "scope_usb" | "scope.usb" => run(Command::ScopeUsb {
+            vid: arg_u16(args, "vid", 0),
+            pid: arg_u16(args, "pid", 0),
+        }),
+        "logic_usb" | "logic.usb" => run(Command::LogicUsb {
+            driver: arg_str(args, "driver"),
+            hz: arg_u32(args, "hz", 1000),
+            samples: arg_usize(args, "samples", 32),
+            cli: arg_str(args, "cli"),
         }),
         other => json!({"error": format!("unknown tool: {other}")}),
     };
@@ -347,6 +384,20 @@ fn main() {
         Commands::LogicCapture { port, hz, samples } => {
             show(&run(Command::LogicCapture { port, hz, samples }));
         }
+        Commands::ScopeUsb { vid, pid } => show(&run(Command::ScopeUsb { vid, pid })),
+        Commands::LogicUsb {
+            driver,
+            hz,
+            samples,
+            cli,
+        } => {
+            show(&run(Command::LogicUsb {
+                driver,
+                hz,
+                samples,
+                cli,
+            }));
+        }
         Commands::Mcp => run_mcp_stdio(),
     }
 }
@@ -356,14 +407,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn catalog_lists_thirteen_tools() {
+    fn catalog_lists_fifteen_tools() {
         let catalog = tools_list();
         let tools = catalog
             .get("tools")
             .and_then(|t| t.as_array())
             .cloned()
             .unwrap_or_default();
-        assert_eq!(tools.len(), 13);
+        assert_eq!(tools.len(), 15);
     }
 
     #[test]
@@ -418,11 +469,21 @@ mod tests {
                 "logic_capture",
                 json!({"port": "", "hz": 1000, "samples": 8}),
             ),
+            ("scope_usb", json!({"vid": 65535, "pid": 65535})),
+            (
+                "logic_usb",
+                json!({"driver": "saleae-logic8", "cli": "DEMO_NO_SUCH_BIN_000"}),
+            ),
         ] {
             let text = content_text(&call_tool(tool, &args));
             assert!(text.contains("\"live\""), "{tool} must report live flag");
         }
         let bad_scope = content_text(&call_tool("scope_idn", &json!({"addr": "127.0.0.1:9"})));
         assert!(bad_scope.contains("\"live\": false"));
+        let down = content_text(&call_tool(
+            "logic_usb",
+            &json!({"driver": "d", "cli": "DEMO_NO_SUCH_BIN_000"}),
+        ));
+        assert!(down.contains("\"engine\": \"down\""));
     }
 }

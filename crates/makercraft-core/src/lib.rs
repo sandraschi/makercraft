@@ -529,6 +529,8 @@ pub const CMD_CNC_PROBE: &str = "cnc.probe";
 pub const CMD_BUS_PROBE: &str = "bus.probe";
 pub const CMD_SCOPE_IDN: &str = "scope.idn";
 pub const CMD_LOGIC_CAPTURE: &str = "logic.capture";
+pub const CMD_SCOPE_USB: &str = "scope.usb";
+pub const CMD_LOGIC_USB: &str = "logic.usb";
 
 /// Bounded command bus. New capability = new variant + dispatch arm + test.
 #[derive(Debug, Clone)]
@@ -569,6 +571,16 @@ pub enum Command {
         hz: u32,
         samples: usize,
     },
+    ScopeUsb {
+        vid: u16,
+        pid: u16,
+    },
+    LogicUsb {
+        driver: String,
+        hz: u32,
+        samples: usize,
+        cli: String,
+    },
 }
 
 /// Resolve a profile name without panicking. Unknown => CNC default.
@@ -602,6 +614,7 @@ pub fn dispatch(cmd: Command) -> serde_json::Value {
                 CMD_STATUS, CMD_PRINTER_STATUS, CMD_CNC_STATUS, CMD_BUS_PINS,
                 CMD_GCODE_LINT, CMD_GCODE_PREVIEW, CMD_GCODE_CHECK, CMD_GCODE_ESTIMATE,
                 CMD_PRINTER_LIVE, CMD_CNC_PROBE, CMD_BUS_PROBE, CMD_SCOPE_IDN, CMD_LOGIC_CAPTURE,
+                CMD_SCOPE_USB, CMD_LOGIC_USB,
             ],
         }),
         Command::PrinterStatus => serde_json::to_value(MakerEngine::get_printer_status())
@@ -670,6 +683,26 @@ pub fn dispatch(cmd: Command) -> serde_json::Value {
             },
             hz,
             samples,
+        ),
+        Command::ScopeUsb { vid, pid } => makercraft_hal::usb::scope_usb(vid, pid),
+        Command::LogicUsb {
+            driver,
+            hz,
+            samples,
+            cli,
+        } => makercraft_hal::usb::logic_usb(
+            if driver.trim().is_empty() {
+                None
+            } else {
+                Some(driver)
+            },
+            hz,
+            samples,
+            if cli.trim().is_empty() {
+                None
+            } else {
+                Some(cli)
+            },
         ),
     }
 }

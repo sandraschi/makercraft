@@ -80,3 +80,21 @@ for `cargo test` to pass.
 Neighbor `databasecraft` owns inventory/part catalogs; MakerCraft links to it,
 never reimplements it. Neighbor `solidcraft` owns CAD; MakerCraft consumes
 G-code, never models.
+
+## UI/UX Architecture & Menu Bar Standard
+
+In accordance with [`CRAFT_MENU_BAR_STANDARD.md`](../../mcp-central-docs/standards/rust-artcraft/CRAFT_MENU_BAR_STANDARD.md):
+- **Pattern 2 (Viewport-Centric Craft Workstation):** Persistent G-code / XY toolpath canvas and digital fabrication bench surrounded by machine monitors. Top quick button row acts as accelerators into the `View` menu. To add a new hardware monitor or tool:
+  1. Register a visibility toggle in the `View` or `Window` menu.
+  2. Add an entry in the sidebar Machine / Probe toolbox.
+  3. Wire the action directly into the universal `Command::dispatch` bus.
+- **Top Menu Bar Hierarchy:**
+  - `File`: New Job (`Ctrl+N`), Open G-code / NC File (`Ctrl+O`), Open Recent ▸, Save Job (`Ctrl+S`), Save As... (`Ctrl+Shift+S`), Export Toolpath (`Ctrl+E`), Close Job (`Ctrl+W`), Quit (`Ctrl+Q`).
+  - `Edit`: Undo (`Ctrl+Z`), Redo (`Ctrl+Y`), Cut, Copy, Paste, Select All, Preferences (`Ctrl+,`).
+  - `View`: XY Toolpath Canvas, Machine Status HUD, G-code Terminal, Oscilloscope / Logic Analyzer, Density (`Compact`/`Standard`), Theme (`Dark`/`Light`).
+  - `Insert`: Add Toolpath Layer, Insert Pause / Tool Change, Add Probe Point, Load Fixture Profile.
+  - `Modify`: Scale / Shift Toolpath, Invert Z-Axis, Optimize Rapids, Adjust Feedrate Override.
+  - `Commands`: Lint Toolpath (Safety Envelope), Run Dry Run / Simulation, Probe Machine Status, Home All Axes, Emergency Stop.
+  - `Window`: Reset Layout, Toolpath Viewport, G-code Editor, Scope Telemetry, Machine Inspector.
+  - `Help` (Mandatory 5-Dialog Suite): `Command Palette...` (`Ctrl+K`), `Keyboard Shortcuts...` (`F1`), `Project Files & Docs...`, `Licenses & Notices...`, `About MakerCraft`.
+- **Behavioral Mechanics:** Smooth `switch_on_hover` between top-level menus, zero-unsafe immediate-mode rendering, and headless `--smoke` parity.

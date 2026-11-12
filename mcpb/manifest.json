@@ -1,0 +1,93 @@
+{
+  "manifest_version": "0.2",
+  "name": "makercraft",
+  "display_name": "MakerCraft",
+  "version": "__VERSION__",
+  "description": "MakerCraft MCP server (15 tools).",
+  "author": {
+    "name": "Sandra Schipal",
+    "url": "https://github.com/sandraschi"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sandraschi/makercraft"
+  },
+  "license": "MIT OR Apache-2.0",
+  "server": {
+    "type": "binary",
+    "entry_point": "makercraft-mcp.exe",
+    "mcp_config": {
+      "command": "${__dirname}/makercraft-mcp.exe",
+      "args": [
+        "mcp"
+      ]
+    }
+  },
+  "compatibility": {
+    "platforms": [
+      "win32"
+    ]
+  },
+  "tools": [
+    {
+      "name": "status",
+      "description": "Bench status + capability catalog + reference rig"
+    },
+    {
+      "name": "printer_status",
+      "description": "Klipper printer telemetry (mock until hardware-in-the-loop)"
+    },
+    {
+      "name": "cnc_status",
+      "description": "GRBL CNC telemetry (mock until hardware-in-the-loop)"
+    },
+    {
+      "name": "bus_pins",
+      "description": "Bus Pirate pin logic levels + pullups"
+    },
+    {
+      "name": "gcode_lint",
+      "description": "Lint G-code: envelope + plunge + temp + feed gates. Args: gcode, profile (cnc|printer)"
+    },
+    {
+      "name": "gcode_preview",
+      "description": "Motion segments for 2D preview. Args: gcode"
+    },
+    {
+      "name": "gcode_check",
+      "description": "Lint G-code for CI (same as lint, machine-readable passes_safety). Args: gcode, profile"
+    },
+    {
+      "name": "gcode_estimate",
+      "description": "Time + travel estimate. Args: gcode, profile"
+    },
+    {
+      "name": "printer_live",
+      "description": "Live Klipper telemetry via Moonraker (Demo when unreachable). Args: url (default MOONRAKER_URL or 127.0.0.1:7125)"
+    },
+    {
+      "name": "cnc_probe",
+      "description": "Probe GRBL with `?` over serial, read-only (Demo when missing). Args: port (default GRBL_PORT)"
+    },
+    {
+      "name": "bus_probe",
+      "description": "Identify Bus Pirate over serial, read-only (Demo when missing). Args: port (default BUS_PIRATE_PORT)"
+    },
+    {
+      "name": "scope_idn",
+      "description": "SCPI *IDN? over TCP for scopes/PSUs/DMMs (Demo when unreachable). Args: addr (default SCOPE_ADDR, ip:port)"
+    },
+    {
+      "name": "logic_capture",
+      "description": "4-pin logic pattern (Demo until SUMP v3). Args: port, hz, samples"
+    },
+    {
+      "name": "scope_usb",
+      "description": "USB scope via USBTMC *IDN? + best-effort Rigol waveform (Demo when missing; needs WinUSB via Zadig). Args: vid, pid (decimals)"
+    },
+    {
+      "name": "logic_usb",
+      "description": "USB logic analyzer via sigrok-cli (DOWN receipt when absent). Args: driver, hz, samples"
+    }
+  ]
+}

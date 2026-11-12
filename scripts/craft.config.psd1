@@ -11,8 +11,10 @@
     CliPackage  = 'makercraft-app'
     CliBin      = 'makercraft-cli'
     CliSmoke    = @('status')
-    McpArgs     = @()
-    McpSmoke    = @()
+    McpPackage  = 'makercraft-mcp'
+    McpBin      = 'makercraft-mcp'
+    McpArgs     = @('mcp')
+    McpSmoke    = @('mcp')
     Installer   = $true
-    Mcpb        = $false
+    Mcpb        = $true
 }

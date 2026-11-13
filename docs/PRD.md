@@ -20,6 +20,11 @@ local-first bench lints a toolpath *before* it touches stock.
   + Bus Pirate identity (or Demo) + SCPI `*IDN?` bench instruments
   + USB scopes via USBTMC (or Demo) + USB logic via sigrok-cli (or DOWN)
   + 4-pin logic sampler.
+- **Bench sources:** oscilloscope, logic-analyzer, multimeter, function-generator,
+  spectrum-analyzer, jtag-swd, and bus-pirate. `instrument.capture` writes one
+  JSON file per source. The file is a labelled demo. It does not drive an
+  output, halt a CPU, or flash firmware. Live scope, logic, and Bus Pirate
+  probes stay on their existing commands.
 - **Agent surface:** 15 MCP tools over stdio, same `dispatch` as the CLI.
 
 ## Bench hardware lives here (no benchcraft repo)
@@ -58,9 +63,10 @@ install with Zadig per device (Rigol 1ab1:04ce, Siglent f4ec:*). Without it
   Missing binary = `engine: down` receipt with labeled Demo pattern, never a
   fake green. Empty driver = usage hint.
 
-Bench hardware that is NOT in scope: Saleae/sigrok USB analyzers, USBTMC/GPIB
-oscilloscope waveform fetch, spectrum analyzers. They want a `benchcraft`
-neighbor repo; MakerCraft only speaks SCPI `*IDN?` until someone files that issue.
+The seven instrument repos stay on disk as the old Python servers. MakerCraft
+owns the capture file. A live meter, generator, spectrum analyzer, or JTAG
+adapter is not wired yet. `logic.usb` already calls sigrok-cli when that
+binary is present.
 
 ## Sim-first
 

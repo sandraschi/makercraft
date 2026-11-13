@@ -1,5 +1,11 @@
 # CHANGELOG — MakerCraft
 
+## 2026-11-13 — Bench instruments write a capture file
+
+- `instrument.sources` lists the seven repos folded into this app: oscilloscope, logic-analyzer, multimeter, function-generator, spectrum-analyzer, jtag-swd, bus-pirate.
+- `instrument.capture` writes one JSON file. `demo` is true and `live` is false. A function-generator file records `output_driven: false`. A jtag-swd file records `flashed: false`. An unknown source writes nothing.
+- The Python servers are not deleted. Live scope, logic, and Bus Pirate probes stay on `scope.usb`, `logic.usb`, and `bus.probe`.
+
 ## 2026-11-06 — GRBL probe hardened via grbl-mcp oracle
 
 - `cnc.probe` now drains the DTR-reset boot banner before asking, normalizes

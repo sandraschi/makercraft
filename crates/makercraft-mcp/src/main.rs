@@ -93,6 +93,14 @@ enum Commands {
         #[arg(long, default_value_t = 0)]
         pid: u16,
     },
+    /// List the seven bench instruments folded into this app
+    InstrumentSources,
+    /// Write a labelled capture file for one instrument. Does not drive hardware.
+    InstrumentCapture {
+        source: String,
+        #[arg(long, default_value = "")]
+        dir: String,
+    },
     /// Capture with a USB logic analyzer via sigrok-cli (DOWN receipt when absent)
     LogicUsb {
         #[arg(long, default_value = "")]
@@ -144,7 +152,9 @@ pub fn tools_list() -> Value {
             {"name": "scope_idn", "description": "SCPI *IDN? over TCP for scopes/PSUs/DMMs (Demo when unreachable). Args: addr (default SCOPE_ADDR, ip:port)", "inputSchema": {"type": "object", "properties": {"addr": {"type": "string"}}}},
             {"name": "logic_capture", "description": "4-pin logic pattern (Demo until SUMP v3). Args: port, hz, samples", "inputSchema": {"type": "object", "properties": {"port": {"type": "string"}, "hz": {"type": "integer"}, "samples": {"type": "integer"}}}},
             {"name": "scope_usb", "description": "USB scope via USBTMC *IDN? + best-effort Rigol waveform (Demo when missing; needs WinUSB via Zadig). Args: vid, pid (decimals)", "inputSchema": {"type": "object", "properties": {"vid": {"type": "integer"}, "pid": {"type": "integer"}}}},
-            {"name": "logic_usb", "description": "USB logic analyzer via sigrok-cli (DOWN receipt when absent). Args: driver, hz, samples", "inputSchema": {"type": "object", "properties": {"driver": {"type": "string"}, "hz": {"type": "integer"}, "samples": {"type": "integer"}}}}
+            {"name": "logic_usb", "description": "USB logic analyzer via sigrok-cli (DOWN receipt when absent). Args: driver, hz, samples", "inputSchema": {"type": "object", "properties": {"driver": {"type": "string"}, "hz": {"type": "integer"}, "samples": {"type": "integer"}}}},
+            {"name": "instrument_sources", "description": "The seven bench instruments folded into MakerCraft", "inputSchema": {"type": "object", "properties": {}}},
+            {"name": "instrument_capture", "description": "Write a labelled DEMO capture file. Does not drive hardware. Args: source, dir", "inputSchema": {"type": "object", "properties": {"source": {"type": "string"}, "dir": {"type": "string"}}, "required": ["source"]}}
         ]
     })
 }
@@ -240,6 +250,11 @@ pub fn call_tool(name: &str, args: &Value) -> Value {
         "scope_usb" | "scope.usb" => run(Command::ScopeUsb {
             vid: arg_u16(args, "vid", 0),
             pid: arg_u16(args, "pid", 0),
+        }),
+        "instrument_sources" | "instrument.sources" => run(Command::InstrumentSources),
+        "instrument_capture" | "instrument.capture" => run(Command::InstrumentCapture {
+            source: arg_str(args, "source"),
+            dir: arg_str(args, "dir"),
         }),
         "logic_usb" | "logic.usb" => run(Command::LogicUsb {
             driver: arg_str(args, "driver"),
@@ -385,6 +400,10 @@ fn main() {
             show(&run(Command::LogicCapture { port, hz, samples }));
         }
         Commands::ScopeUsb { vid, pid } => show(&run(Command::ScopeUsb { vid, pid })),
+        Commands::InstrumentSources => show(&run(Command::InstrumentSources)),
+        Commands::InstrumentCapture { source, dir } => {
+            show(&run(Command::InstrumentCapture { source, dir }));
+        }
         Commands::LogicUsb {
             driver,
             hz,
@@ -414,7 +433,7 @@ mod tests {
             .and_then(|t| t.as_array())
             .cloned()
             .unwrap_or_default();
-        assert_eq!(tools.len(), 15);
+        assert_eq!(tools.len(), 17);
     }
 
     #[test]

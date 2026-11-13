@@ -531,6 +531,157 @@ pub const CMD_SCOPE_IDN: &str = "scope.idn";
 pub const CMD_LOGIC_CAPTURE: &str = "logic.capture";
 pub const CMD_SCOPE_USB: &str = "scope.usb";
 pub const CMD_LOGIC_USB: &str = "logic.usb";
+pub const CMD_INSTRUMENT_SOURCES: &str = "instrument.sources";
+pub const CMD_INSTRUMENT_CAPTURE: &str = "instrument.capture";
+
+/// One bench instrument that used to be its own MCP server.
+pub struct InstrumentSource {
+    pub id: &'static str,
+    pub former_repo: &'static str,
+    pub role: &'static str,
+    /// Existing command that already talks to hardware, when there is one.
+    pub live_command: Option<&'static str>,
+}
+
+/// The seven bench repos folded into this app. A capture from any of them is a file.
+pub const INSTRUMENT_SOURCES: &[InstrumentSource] = &[
+    InstrumentSource {
+        id: "oscilloscope",
+        former_repo: "oscilloscope-mcp",
+        role: "Waveform. A live trace still goes through scope.usb or scope.idn.",
+        live_command: Some(CMD_SCOPE_USB),
+    },
+    InstrumentSource {
+        id: "logic-analyzer",
+        former_repo: "logic-analyzer-mcp",
+        role: "Digital capture. A live capture still goes through logic.usb or logic.capture.",
+        live_command: Some(CMD_LOGIC_USB),
+    },
+    InstrumentSource {
+        id: "multimeter",
+        former_repo: "multimeter-mcp",
+        role: "Voltage, current, and continuity. No live meter is wired yet.",
+        live_command: None,
+    },
+    InstrumentSource {
+        id: "function-generator",
+        former_repo: "function-generator-mcp",
+        role: "Stimulus plan. This command does not drive an output.",
+        live_command: None,
+    },
+    InstrumentSource {
+        id: "spectrum-analyzer",
+        former_repo: "spectrum-analyzer-mcp",
+        role: "Spectrum sweep. No live analyzer is wired yet.",
+        live_command: None,
+    },
+    InstrumentSource {
+        id: "jtag-swd",
+        former_repo: "jtag-swd-mcp",
+        role: "Debug inspect plan. This command does not halt or flash.",
+        live_command: None,
+    },
+    InstrumentSource {
+        id: "bus-pirate",
+        former_repo: "bus-pirate-mcp",
+        role: "Bus identity. A live probe still goes through bus.probe.",
+        live_command: Some(CMD_BUS_PROBE),
+    },
+];
+
+fn instrument_by_id(id: &str) -> Option<&'static InstrumentSource> {
+    INSTRUMENT_SOURCES.iter().find(|s| s.id == id)
+}
+
+fn demo_reading(id: &str) -> serde_json::Value {
+    match id {
+        "oscilloscope" => serde_json::json!({
+            "label": "DEMO",
+            "unit": "V",
+            "samples": [0.0, 1.0, 0.0, -1.0],
+            "note": "Not a probe. Use scope.usb or scope.idn for a live instrument."
+        }),
+        "logic-analyzer" => serde_json::json!({
+            "label": "DEMO",
+            "channels": {"MOSI": [1, 0, 1, 0], "CLK": [0, 1, 0, 1]},
+            "note": "Not a capture. Use logic.usb or logic.capture for a live analyzer."
+        }),
+        "multimeter" => serde_json::json!({
+            "label": "DEMO",
+            "volts": null,
+            "note": "No meter was read."
+        }),
+        "function-generator" => serde_json::json!({
+            "label": "DEMO",
+            "waveform": "sine",
+            "hz": 1000,
+            "output_driven": false,
+            "note": "Plan only. The output was not enabled."
+        }),
+        "spectrum-analyzer" => serde_json::json!({
+            "label": "DEMO",
+            "peaks": [],
+            "note": "No sweep was run."
+        }),
+        "jtag-swd" => serde_json::json!({
+            "label": "DEMO",
+            "halted": false,
+            "flashed": false,
+            "note": "Inspect plan only. Nothing was halted or flashed."
+        }),
+        "bus-pirate" => serde_json::json!({
+            "label": "DEMO",
+            "pins": ["MOSI", "MISO", "CLK", "CS"],
+            "note": "Not a live identity. Use bus.probe for the serial instrument."
+        }),
+        _ => serde_json::json!({"label": "DEMO", "note": "Unknown source."}),
+    }
+}
+
+/// Write one capture file. Every file from this path is a demo until a live command fills it.
+pub fn capture_instrument(source: &str, dir: &str) -> serde_json::Value {
+    let Some(spec) = instrument_by_id(source.trim()) else {
+        return serde_json::json!({
+            "error": format!("unknown instrument '{source}'"),
+            "sources": INSTRUMENT_SOURCES.iter().map(|s| s.id).collect::<Vec<_>>(),
+        });
+    };
+    let folder = if dir.trim().is_empty() {
+        std::env::var("MAKERCRAFT_CAPTURE_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| std::env::temp_dir().join("makercraft-captures"))
+    } else {
+        std::path::PathBuf::from(dir)
+    };
+    if let Err(e) = std::fs::create_dir_all(&folder) {
+        return serde_json::json!({"error": format!("capture dir: {e}")});
+    }
+    let path = folder.join(format!("{}.json", spec.id));
+    let body = serde_json::json!({
+        "source": spec.id,
+        "former_repo": spec.former_repo,
+        "role": spec.role,
+        "live_command": spec.live_command,
+        "demo": true,
+        "live": false,
+        "reading": demo_reading(spec.id),
+    });
+    let text = match serde_json::to_string_pretty(&body) {
+        Ok(t) => t,
+        Err(e) => return serde_json::json!({"error": format!("capture encode: {e}")}),
+    };
+    if let Err(e) = std::fs::write(&path, text) {
+        return serde_json::json!({"error": format!("capture write: {e}")});
+    }
+    serde_json::json!({
+        "source": spec.id,
+        "former_repo": spec.former_repo,
+        "path": path.display().to_string(),
+        "demo": true,
+        "live": false,
+        "live_command": spec.live_command,
+    })
+}
 
 /// Bounded command bus. New capability = new variant + dispatch arm + test.
 #[derive(Debug, Clone)]
@@ -581,6 +732,11 @@ pub enum Command {
         samples: usize,
         cli: String,
     },
+    InstrumentSources,
+    InstrumentCapture {
+        source: String,
+        dir: String,
+    },
 }
 
 /// Resolve a profile name without panicking. Unknown => CNC default.
@@ -615,7 +771,13 @@ pub fn dispatch(cmd: Command) -> serde_json::Value {
                 CMD_GCODE_LINT, CMD_GCODE_PREVIEW, CMD_GCODE_CHECK, CMD_GCODE_ESTIMATE,
                 CMD_PRINTER_LIVE, CMD_CNC_PROBE, CMD_BUS_PROBE, CMD_SCOPE_IDN, CMD_LOGIC_CAPTURE,
                 CMD_SCOPE_USB, CMD_LOGIC_USB,
+                CMD_INSTRUMENT_SOURCES, CMD_INSTRUMENT_CAPTURE,
             ],
+            "instruments": INSTRUMENT_SOURCES.iter().map(|s| serde_json::json!({
+                "id": s.id,
+                "former_repo": s.former_repo,
+                "live_command": s.live_command,
+            })).collect::<Vec<_>>(),
         }),
         Command::PrinterStatus => serde_json::to_value(MakerEngine::get_printer_status())
             .unwrap_or_else(
@@ -704,5 +866,14 @@ pub fn dispatch(cmd: Command) -> serde_json::Value {
                 Some(cli)
             },
         ),
+        Command::InstrumentSources => serde_json::json!({
+            "sources": INSTRUMENT_SOURCES.iter().map(|s| serde_json::json!({
+                "id": s.id,
+                "former_repo": s.former_repo,
+                "role": s.role,
+                "live_command": s.live_command,
+            })).collect::<Vec<_>>(),
+        }),
+        Command::InstrumentCapture { source, dir } => capture_instrument(&source, &dir),
     }
 }

@@ -1,5 +1,10 @@
 # MakerCraft
 
+![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)
+![Rust 1.90+](https://img.shields.io/badge/rust-1.90%2B-orange?logo=rust)
+![MCP stdio](https://img.shields.io/badge/MCP-stdio-purple)
+![ArtCraft harness](https://img.shields.io/badge/ArtCraft-harness-green)
+
 **MakerCraft** is an ArtCraft-tier local-first digital fabrication bench and instrument studio connecting 3D printers, CNC routers, and hardware protocol debuggers into a unified desktop and agentic interface.
 
 Features:
@@ -10,6 +15,7 @@ Features:
 - **Klipper / Moonraker 3D Printing**: Direct feedrate, temperature, and kinematic monitoring.
 - **GRBL CNC Router Control**: Toolhead coordinates, spindle speed, sub-zero plunge safety linting.
 - **Bus Pirate Protocol Bridge**: Real-time pin logic level and pullup voltage monitoring.
+- **Bench capture**: `instrument-capture` writes a labelled demo file for the oscilloscope, logic analyzer, multimeter, function generator, spectrum analyzer, JTAG/SWD adapter, and Bus Pirate. It does not drive hardware.
 - **FastMCP Protocol**: Exposed locally on port `14130`.
 
 Reference rig (all lint bounds are tested against this):

@@ -1,4 +1,7 @@
-use makercraft_core::{dispatch, pick_profile, Command, MachineProfile, MakerEngine};
+use makercraft_core::{
+    capture_instrument, dispatch, pick_profile, Command, MachineProfile, MakerEngine,
+    INSTRUMENT_SOURCES,
+};
 use makercraft_hal::MachineType;
 
 #[test]
@@ -109,7 +112,7 @@ fn test_dispatch_status_lists_all_commands() {
         .and_then(|c| c.as_array())
         .cloned()
         .unwrap_or_default();
-    assert_eq!(cmds.len(), 15);
+    assert_eq!(cmds.len(), 17);
 }
 
 #[test]
@@ -185,4 +188,30 @@ fn test_dispatch_usb_demos_without_hardware() {
     });
     assert_eq!(logic.get("live").and_then(|v| v.as_bool()), Some(false));
     assert_eq!(logic.get("engine").and_then(|v| v.as_str()), Some("down"));
+}
+
+#[test]
+fn instrument_capture_writes_a_demo_file_and_refuses_an_unknown_source() {
+    assert_eq!(INSTRUMENT_SOURCES.len(), 7);
+    let dir = std::env::temp_dir().join(format!("makercraft-cap-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("dir");
+    for source in INSTRUMENT_SOURCES {
+        let written = capture_instrument(source.id, &dir.display().to_string());
+        assert_eq!(written["demo"], true, "{written}");
+        assert_eq!(written["live"], false, "{written}");
+        assert_eq!(written["former_repo"], source.former_repo);
+        let path = written["path"].as_str().expect("path");
+        let text = std::fs::read_to_string(path).expect("read");
+        assert!(text.contains("\"demo\": true"), "{text}");
+        assert!(text.contains(source.id), "{text}");
+        if source.id == "function-generator" {
+            assert!(text.contains("\"output_driven\": false"), "{text}");
+        }
+        if source.id == "jtag-swd" {
+            assert!(text.contains("\"flashed\": false"), "{text}");
+        }
+    }
+    let bad = capture_instrument("benchcraft", &dir.display().to_string());
+    assert!(bad.get("error").is_some(), "{bad}");
 }

@@ -8,7 +8,7 @@ Python/FastMCP/Starlette/port-claiming rules are INVALIDATED here.
 
 - L1 `makercraft-core`: G-code parser, safety linter, profiles, `Command::dispatch`. Never panics.
 - L1 `makercraft-hal`: Klipper/GRBL/Bus-Pirate oracles (mock today, live bridges v2).
-- L2 `makercraft-mcp`: CLI-first (`status|printer-status|cnc-status|bus-pins|lint|check|estimate|preview`) + `mcp` stdio. stdout = pure JSON-RPC, logs to stderr.
+- L2 `makercraft-mcp`: CLI-first, including `instrument-sources` and `instrument-capture`, plus `mcp` stdio. stdout = pure JSON-RPC, logs to stderr. `makercraft-cli` is the shorter lint binary and does not capture.
 - L3 `makercraft-app`: `eframe/egui` bench calling core in-process. Never spawns the MCP exe, never opens an HTTP sidecar.
 
 ## Gates (every commit)

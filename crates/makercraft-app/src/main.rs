@@ -1,5 +1,5 @@
 use clap::Parser;
-use makercraft_core::{MachineProfile, MakerEngine, ToolpathLintReport};
+use makercraft_core::{MachineProfile, MakerEngine, ToolpathLintReport, INSTRUMENT_SOURCES};
 use serde_json::json;
 
 #[derive(Parser, Debug)]
@@ -586,6 +586,13 @@ impl eframe::App for MakerCraftApp {
                 }
                 ui.add_space(6.0);
                 body_text(ui, "Live Moonraker/GRBL bridges land here (v2). Telemetry above is the declared reference-rig mock until hardware-in-the-loop lands.");
+                ui.add_space(8.0);
+                big_heading(ui, "Bench instruments");
+                body_text(ui, "instrument-capture writes a labelled demo file. It does not drive an output or flash a chip.");
+                for source in INSTRUMENT_SOURCES {
+                    let live = source.live_command.unwrap_or("no live command yet");
+                    body_text(ui, &format!("{}  ({})  {live}", source.id, source.former_repo));
+                }
             }
 
             BenchTab::Gcode => {

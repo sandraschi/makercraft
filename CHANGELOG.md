@@ -1,5 +1,14 @@
 # CHANGELOG — MakerCraft
 
+## 2026-11-13 — Bench instruments write a capture file
+
+- `instrument.sources` lists the seven repos folded into this app: oscilloscope, logic-analyzer, multimeter, function-generator, spectrum-analyzer, jtag-swd, bus-pirate.
+- `instrument.capture` writes one JSON file. `demo` is true and `live` is false. A function-generator file records `output_driven: false`. A jtag-swd file records `flashed: false`. An unknown source writes nothing. The directory is `--dir`, otherwise `MAKERCRAFT_CAPTURE_DIR`, otherwise the temp folder `makercraft-captures`.
+- CLI and MCP: `makercraft-mcp instrument-sources` and `makercraft-mcp instrument-capture <source>`. The catalog is 17 tools. `makercraft-cli` is unchanged.
+- The Machines tab lists the seven sources and names the live command when one exists.
+- The Python servers are not deleted. Live scope, logic, and Bus Pirate probes stay on `scope.usb`, `logic.usb`, and `bus.probe`.
+- Recount, same method as the old 3,570 (physical lines in the `.rs` files): 3,796. tokei code lines: 3,399. `cargo test --workspace --offline` passed 38 (15 core, 16 hal, 7 mcp). `test_dispatch_status_lists_all_commands` expects 17.
+
 ## 2026-11-06 — GRBL probe hardened via grbl-mcp oracle
 
 - `cnc.probe` now drains the DTR-reset boot banner before asking, normalizes

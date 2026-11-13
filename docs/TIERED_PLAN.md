@@ -25,9 +25,9 @@ Tier 1: Core Engine ──> Tier 2: MCP / CLI ──> Tier 3: Desktop UI ──>
 - [x] Bench HAL drivers: Moonraker HTTP, GRBL serial, Bus Pirate, USBTMC scope, sigrok logic.
 - [x] `#![forbid(unsafe_code)]` and zero-panic clippy lints.
 
-### Tier 2 — Headless Driver & FastMCP (`makercraft-mcp`)
+### Tier 2 — Headless Driver & stdio MCP (`makercraft-mcp`)
 - [x] Unified CLI `makercraft-cli` with `--json` output.
-- [x] FastMCP stdio server communicating over JSON-RPC 2.0 (15 tools).
+- [x] Stdio server communicating over JSON-RPC 2.0 (17 tools, including `instrument.sources` and `instrument.capture`).
 - [x] Hardware simulation and demo fallback testing without real benches in CI.
 - [x] Headless `--smoke` verification without window initialization.
 
@@ -35,6 +35,7 @@ Tier 1: Core Engine ──> Tier 2: MCP / CLI ──> Tier 3: Desktop UI ──>
 - [x] Immediate-mode `egui` 0.37 / `wgpu` workstation.
 - [x] 2D XY toolpath visualizer (feed vs rapid, bed outline, start/end).
 - [x] Hardware status cards, scope waveform viewer, and logic trace HUD.
+- [x] Machines tab lists the seven bench sources. The capture command is the CLI, not a button.
 
 ### Tier 4 — Craft Menu Bar Standard, Help Suite & Hardened Verification
 - [ ] Universal 8-menu bar (`File`, `Edit`, `View`, `Insert`, `Modify`, `Commands`, `Window`, `Help`) with `switch_on_hover`.

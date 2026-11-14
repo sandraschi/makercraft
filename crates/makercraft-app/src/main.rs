@@ -113,11 +113,11 @@ impl MakerCraftApp {
 }
 
 fn big_heading(ui: &mut egui::Ui, text: &str) {
-    ui.label(egui::RichText::new(text).size(27.0).strong().color(PAPER));
+    ui.label(egui::RichText::new(text).size(27.0).strong());
 }
 
 fn body_text(ui: &mut egui::Ui, text: &str) {
-    ui.label(egui::RichText::new(text).size(17.5).color(PAPER));
+    ui.label(egui::RichText::new(text).size(17.5));
 }
 
 impl eframe::App for MakerCraftApp {
@@ -144,9 +144,12 @@ impl eframe::App for MakerCraftApp {
         } else {
             let mut v = egui::Visuals::light();
             v.override_text_color = Some(egui::Color32::BLACK);
+            v.weak_text_color = Some(egui::Color32::BLACK);
             v.panel_fill = egui::Color32::WHITE;
-            v.window_fill = egui::Color32::from_rgb(244, 246, 250);
+            v.window_fill = egui::Color32::WHITE;
             v.extreme_bg_color = egui::Color32::WHITE;
+            v.faint_bg_color = egui::Color32::WHITE;
+            v.widgets.noninteractive.fg_stroke = egui::Stroke::new(2.0, egui::Color32::BLACK);
             v.selection.bg_fill = egui::Color32::from_rgb(10, 25, 60);
             v.selection.stroke = egui::Stroke::new(2.0, egui::Color32::WHITE);
             v.window_stroke = egui::Stroke::new(2.0, egui::Color32::from_rgb(10, 25, 60));
@@ -547,7 +550,7 @@ impl eframe::App for MakerCraftApp {
                         ui.label(egui::RichText::new("Warnings").size(19.0).strong().color(GOLD));
                         egui::ScrollArea::vertical().max_height(160.0).show(ui, |ui| {
                             for w in &r.warnings {
-                                ui.label(egui::RichText::new(format!("- {w}")).size(17.0).color(PAPER));
+                                ui.label(egui::RichText::new(format!("- {w}")).size(17.0));
                             }
                         });
                     }

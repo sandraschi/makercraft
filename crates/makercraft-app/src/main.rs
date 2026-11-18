@@ -1,9 +1,11 @@
 mod chat_dock;
+mod dashboard;
 mod hardware_viz;
 mod reference_views;
 
 use chat_dock::ChatDockState;
 use clap::Parser;
+use dashboard::{DashboardAction, DashboardState};
 use hardware_viz::{draw_hardware_diagram, draw_workshop_panorama, HardwareKind, WorkshopAction};
 use makercraft_core::{
     dispatch, Command, MachineProfile, MakerEngine, ToolpathLintReport, INSTRUMENT_SOURCES,
@@ -34,6 +36,7 @@ const OK_GREEN: egui::Color32 = egui::Color32::from_rgb(120, 255, 170);
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 enum BenchTab {
+    Dashboard,
     Workshop,
     Preview,
     Safety,
@@ -75,6 +78,7 @@ pub struct MakerCraftApp {
     file_path_input: String,
     last_probe_json: String,
     selected_station: Option<HardwareKind>,
+    dashboard: DashboardState,
     chat: ChatDockState,
 }
 
@@ -122,6 +126,7 @@ impl MakerCraftApp {
             file_path_input: "sample.gcode".to_string(),
             last_probe_json: String::new(),
             selected_station: Some(HardwareKind::Printer3d),
+            dashboard: DashboardState::new(),
             chat: ChatDockState::default(),
         }
     }
@@ -158,6 +163,70 @@ impl MakerCraftApp {
         self.last_probe_json =
             serde_json::to_string_pretty(&val).unwrap_or_else(|_| val.to_string());
         self.status_msg = format!("Executed {label}");
+    }
+
+    fn execute_palette_cmd(&mut self, id: &str) {
+        match id {
+            "dashboard" => self.active_tab = BenchTab::Dashboard,
+            "workshop" => self.active_tab = BenchTab::Workshop,
+            "lint" => {
+                self.analyze();
+                self.active_tab = BenchTab::Safety;
+            }
+            "preview" => self.active_tab = BenchTab::Preview,
+            "machines" => self.active_tab = BenchTab::Machines,
+            "instruments" => self.active_tab = BenchTab::Instruments,
+            "vienna" => self.active_tab = BenchTab::ViennaBuying,
+            "chat" => self.chat.open = !self.chat.open,
+            "probe_printer" => {
+                self.run_command("printer_live", Command::PrinterLive { url: String::new() });
+                self.active_tab = BenchTab::Machines;
+            }
+            "probe_cnc" => {
+                self.run_command(
+                    "cnc_probe",
+                    Command::CncProbe {
+                        port: String::new(),
+                    },
+                );
+                self.active_tab = BenchTab::Machines;
+            }
+            "probe_bus" => {
+                self.run_command(
+                    "bus_probe",
+                    Command::BusProbe {
+                        port: String::new(),
+                    },
+                );
+                self.active_tab = BenchTab::Machines;
+            }
+            "probe_scope" => {
+                self.run_command(
+                    "scope_idn",
+                    Command::ScopeIdn {
+                        addr: String::new(),
+                    },
+                );
+                self.active_tab = BenchTab::Instruments;
+            }
+            "probe_logic" => {
+                self.run_command(
+                    "logic_capture",
+                    Command::LogicCapture {
+                        port: String::new(),
+                        hz: 1000,
+                        samples: 32,
+                    },
+                );
+                self.active_tab = BenchTab::Instruments;
+            }
+            "docs" => self.show_docs = true,
+            "estop" => {
+                self.estop = true;
+                self.status_msg = "EMERGENCY STOP LATCHED".to_string();
+            }
+            _ => {}
+        }
     }
 
     fn profile(&self) -> MachineProfile {
@@ -484,6 +553,7 @@ impl eframe::App for MakerCraftApp {
                     }
                     ui.separator();
                     for (tab, label) in [
+                        (BenchTab::Dashboard, "Dashboard & Kanban"),
                         (BenchTab::Workshop, "Workshop"),
                         (BenchTab::Preview, "2D Preview"),
                         (BenchTab::Safety, "Safety Lint"),
@@ -556,6 +626,7 @@ impl eframe::App for MakerCraftApp {
                 ui.heading("MakerCraft Bench");
                 ui.separator();
                 for (tab, label) in [
+                    (BenchTab::Dashboard, "Dashboard"),
                     (BenchTab::Workshop, "Workshop"),
                     (BenchTab::Preview, "2D Preview"),
                     (BenchTab::Safety, "Safety Lint"),
@@ -702,6 +773,46 @@ impl eframe::App for MakerCraftApp {
                 return;
             }
             match self.active_tab {
+            BenchTab::Dashboard => {
+                let profile_name = self.profile().name;
+                let estop = self.estop;
+                let lint = self.lint_report.clone();
+                match self.dashboard.ui(ui, &profile_name, estop, lint.as_ref()) {
+                    DashboardAction::LoadSafeCnc => {
+                        self.profile_cnc = true;
+                        self.set_gcode("G90\nG21\nG0 Z25.0 F3000\nG1 X20 Y20 F1200\nG1 Z-1.0 F300\nG1 X80 Y20\nG1 X80 Y80\nG1 X20 Y80\nG1 X20 Y20\nG0 Z25\nM2".to_string());
+                        self.status_msg = "Loaded Safe 3018 CNC Square".to_string();
+                    }
+                    DashboardAction::LoadBadPlungeDemo => {
+                        self.profile_cnc = true;
+                        self.set_gcode("G90\nG21\nG0 X20 Y20\nG0 Z-5.0\nG1 X80 Y20 F1200\nM2".to_string());
+                        self.active_tab = BenchTab::Safety;
+                    }
+                    DashboardAction::LoadPrinterCalibration => {
+                        self.profile_cnc = false;
+                        self.set_gcode("G90\nG21\nM104 S205\nM140 S60\nG0 Z0.3 F3000\nG1 X20 Y20 F1500\nG1 X120 Y20 E4.0\nG1 X120 Y120 E8.0\nG1 X20 Y120 E12.0\nG1 X20 Y20 E16.0\nG0 Z20\nM104 S0\nM140 S0\nM2".to_string());
+                        self.status_msg = "Loaded Klipper Calibration Frame".to_string();
+                    }
+                    DashboardAction::SelectCncProfile => {
+                        self.profile_cnc = true;
+                        self.analyze();
+                    }
+                    DashboardAction::SelectPrinterProfile => {
+                        self.profile_cnc = false;
+                        self.analyze();
+                    }
+                    DashboardAction::RunLint => {
+                        self.analyze();
+                        self.active_tab = BenchTab::Safety;
+                    }
+                    DashboardAction::OpenPreview => self.active_tab = BenchTab::Preview,
+                    DashboardAction::OpenWorkshop => self.active_tab = BenchTab::Workshop,
+                    DashboardAction::OpenInstruments => self.active_tab = BenchTab::Instruments,
+                    DashboardAction::OpenChat => self.chat.open = true,
+                    DashboardAction::OpenVienna => self.active_tab = BenchTab::ViennaBuying,
+                    DashboardAction::None => {}
+                }
+            }
             BenchTab::Workshop => {
                 egui::ScrollArea::vertical().id_salt("workshop_scroll").show(ui, |ui| {
                     big_heading(ui, "Maker's Workshop & ESD Workbench");
@@ -1182,6 +1293,7 @@ impl eframe::App for MakerCraftApp {
                     ui.separator();
                     let q = self.palette_query.to_lowercase();
                     let actions: &[(&str, &str)] = &[
+                        ("dashboard", "Switch to Bench Dashboard & Project Kanban"),
                         ("workshop", "Switch to Workshop & ESD Workbench Panorama"),
                         ("lint", "Run G-code Safety Lint (F5)"),
                         ("preview", "Switch to 2D Preview"),
@@ -1198,87 +1310,24 @@ impl eframe::App for MakerCraftApp {
                         ("estop", "Latch Emergency Stop (Esc)"),
                     ];
                     let mut first_match: Option<&str> = None;
+                    let mut run_id: Option<&str> = None;
                     for (id, label) in actions {
                         if q.is_empty() || label.to_lowercase().contains(&q) || id.contains(&q) {
                             if first_match.is_none() {
                                 first_match = Some(*id);
                             }
                             if ui.button(*label).clicked() {
-                                self.palette_query.clear();
-                                close_palette = true;
-                                match *id {
-                                    "workshop" => self.active_tab = BenchTab::Workshop,
-                                    "lint" => {
-                                        self.analyze();
-                                        self.active_tab = BenchTab::Safety;
-                                    }
-                                    "preview" => self.active_tab = BenchTab::Preview,
-                                    "machines" => self.active_tab = BenchTab::Machines,
-                                    "instruments" => self.active_tab = BenchTab::Instruments,
-                                    "vienna" => self.active_tab = BenchTab::ViennaBuying,
-                                    "chat" => self.chat.open = !self.chat.open,
-                                    "probe_printer" => {
-                                        self.run_command(
-                                            "printer_live",
-                                            Command::PrinterLive { url: String::new() },
-                                        );
-                                        self.active_tab = BenchTab::Machines;
-                                    }
-                                    "probe_cnc" => {
-                                        self.run_command(
-                                            "cnc_probe",
-                                            Command::CncProbe {
-                                                port: String::new(),
-                                            },
-                                        );
-                                        self.active_tab = BenchTab::Machines;
-                                    }
-                                    "probe_bus" => {
-                                        self.run_command(
-                                            "bus_probe",
-                                            Command::BusProbe {
-                                                port: String::new(),
-                                            },
-                                        );
-                                        self.active_tab = BenchTab::Machines;
-                                    }
-                                    "probe_scope" => {
-                                        self.run_command(
-                                            "scope_idn",
-                                            Command::ScopeIdn {
-                                                addr: String::new(),
-                                            },
-                                        );
-                                        self.active_tab = BenchTab::Instruments;
-                                    }
-                                    "probe_logic" => {
-                                        self.run_command(
-                                            "logic_capture",
-                                            Command::LogicCapture {
-                                                port: String::new(),
-                                                hz: 1000,
-                                                samples: 32,
-                                            },
-                                        );
-                                        self.active_tab = BenchTab::Instruments;
-                                    }
-                                    "docs" => self.show_docs = true,
-                                    "estop" => {
-                                        self.estop = true;
-                                        self.status_msg = "EMERGENCY STOP LATCHED".to_string();
-                                    }
-                                    _ => {}
-                                }
+                                run_id = Some(*id);
                             }
                         }
                     }
-                    if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        if let Some(id) = first_match {
-                            if id == "lint" {
-                                self.analyze();
-                            }
-                            close_palette = true;
-                        }
+                    if run_id.is_none() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                        run_id = first_match;
+                    }
+                    if let Some(id) = run_id {
+                        self.execute_palette_cmd(id);
+                        self.palette_query.clear();
+                        close_palette = true;
                     }
                 });
             if !open || close_palette {

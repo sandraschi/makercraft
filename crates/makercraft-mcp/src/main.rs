@@ -112,8 +112,31 @@ enum Commands {
         #[arg(long, default_value = "")]
         cli: String,
     },
+    /// Manage bundled MakerCraft skills (list, show, export)
+    Skills {
+        #[command(subcommand)]
+        action: SkillAction,
+    },
     /// Run the MCP 2024-11-05 stdio server (stdout = pure JSON-RPC)
     Mcp,
+}
+
+#[derive(Subcommand, Debug)]
+enum SkillAction {
+    /// List bundled skills
+    List {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Print one bundled skill to stdout
+    Show { name: String },
+    /// Export all bundled skills into a target directory
+    Export {
+        #[arg(long)]
+        to: String,
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 fn read_or_sample(path: &str) -> String {
@@ -154,7 +177,8 @@ pub fn tools_list() -> Value {
             {"name": "scope_usb", "description": "USB scope via USBTMC *IDN? + best-effort Rigol waveform (Demo when missing; needs WinUSB via Zadig). Args: vid, pid (decimals)", "inputSchema": {"type": "object", "properties": {"vid": {"type": "integer"}, "pid": {"type": "integer"}}}},
             {"name": "logic_usb", "description": "USB logic analyzer via sigrok-cli (DOWN receipt when absent). Args: driver, hz, samples", "inputSchema": {"type": "object", "properties": {"driver": {"type": "string"}, "hz": {"type": "integer"}, "samples": {"type": "integer"}}}},
             {"name": "instrument_sources", "description": "The seven bench instruments folded into MakerCraft", "inputSchema": {"type": "object", "properties": {}}},
-            {"name": "instrument_capture", "description": "Write a labelled DEMO capture file. Does not drive hardware. Args: source, dir", "inputSchema": {"type": "object", "properties": {"source": {"type": "string"}, "dir": {"type": "string"}}, "required": ["source"]}}
+            {"name": "instrument_capture", "description": "Write a labelled DEMO capture file. Does not drive hardware. Args: source, dir", "inputSchema": {"type": "object", "properties": {"source": {"type": "string"}, "dir": {"type": "string"}}, "required": ["source"]}},
+            {"name": "makercraft_skill_read", "description": "List bundled MakerCraft skills or read a specific skill by name. Args: name (optional)", "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}}}}
         ]
     })
 }
@@ -262,6 +286,31 @@ pub fn call_tool(name: &str, args: &Value) -> Value {
             samples: arg_usize(args, "samples", 32),
             cli: arg_str(args, "cli"),
         }),
+        "makercraft_skill_read" | "makercraft.skill_read" => {
+            let skill_name = arg_str(args, "name");
+            if skill_name.is_empty() {
+                let items: Vec<Value> = makercraft_core::skills::skills_list()
+                    .iter()
+                    .map(|s| {
+                        json!({
+                            "name": s.name,
+                            "description": s.description,
+                            "uri": format!("skill://{}/SKILL.md", s.name),
+                        })
+                    })
+                    .collect();
+                json!({"skills": items})
+            } else if let Some(s) = makercraft_core::skills::skill_by_name(&skill_name) {
+                json!({
+                    "name": s.name,
+                    "description": s.description,
+                    "uri": format!("skill://{}/SKILL.md", s.name),
+                    "content": s.skill_md,
+                })
+            } else {
+                json!({"error": format!("unknown skill: {skill_name}")})
+            }
+        }
         other => json!({"error": format!("unknown tool: {other}")}),
     };
     let text = serde_json::to_string_pretty(&value)
@@ -304,7 +353,10 @@ fn run_mcp_stdio() {
         let result: Option<Value> = match method {
             "initialize" => Some(json!({
                 "protocolVersion": "2024-11-05",
-                "capabilities": {"tools": {}},
+                "capabilities": {
+                    "tools": {},
+                    "resources": { "listChanged": false }
+                },
                 "serverInfo": {"name": "makercraft-mcp", "version": env!("CARGO_PKG_VERSION")},
             })),
             "tools/list" => Some(tools_list()),
@@ -313,6 +365,28 @@ fn run_mcp_stdio() {
                 let tool_name = params.get("name").and_then(|n| n.as_str()).unwrap_or("");
                 let tool_args = params.get("arguments").cloned().unwrap_or(json!({}));
                 Some(call_tool(tool_name, &tool_args))
+            }
+            "resources/list" => Some(resources_list()),
+            "resources/read" => {
+                let params = req.get("params").cloned().unwrap_or(json!({}));
+                let uri = params.get("uri").and_then(|u| u.as_str()).unwrap_or("");
+                match resources_read(uri) {
+                    Ok(v) => Some(v),
+                    Err((code, msg)) => {
+                        if !is_notification {
+                            let resp = json!({
+                                "jsonrpc": "2.0",
+                                "id": id,
+                                "error": {"code": code, "message": msg}
+                            });
+                            if let Ok(text) = serde_json::to_string(&resp) {
+                                let _ = writeln!(out, "{text}");
+                                let _ = out.flush();
+                            }
+                        }
+                        continue;
+                    }
+                }
             }
             "ping" => Some(json!({})),
             _ => {
@@ -417,7 +491,89 @@ fn main() {
                 cli,
             }));
         }
+        Commands::Skills { action } => match action {
+            SkillAction::List { json } => {
+                let skills = makercraft_core::skills::skills_list();
+                if json {
+                    let items: Vec<Value> = skills
+                        .iter()
+                        .map(|s| {
+                            json!({
+                                "name": s.name,
+                                "description": s.description,
+                                "uri": format!("skill://{}/SKILL.md", s.name),
+                            })
+                        })
+                        .collect();
+                    show(&json!({"skills": items}));
+                } else {
+                    for s in skills {
+                        println!("{:<32} {}", s.name, s.description);
+                    }
+                }
+            }
+            SkillAction::Show { name } => {
+                if let Some(s) = makercraft_core::skills::skill_by_name(&name) {
+                    print!("{}", s.skill_md);
+                } else {
+                    eprintln!("unknown skill: {name}");
+                    std::process::exit(1);
+                }
+            }
+            SkillAction::Export { to, force } => {
+                let dest = std::path::Path::new(&to);
+                for s in makercraft_core::skills::skills_list() {
+                    let dir = dest.join(s.name);
+                    if let Err(e) = std::fs::create_dir_all(&dir) {
+                        eprintln!("mkdir {}: {e}", dir.display());
+                        std::process::exit(1);
+                    }
+                    let path = dir.join("SKILL.md");
+                    if path.exists() && !force {
+                        eprintln!("refusing to overwrite {} (pass --force)", path.display());
+                        std::process::exit(1);
+                    }
+                    if let Err(e) = std::fs::write(&path, s.skill_md) {
+                        eprintln!("write {}: {e}", path.display());
+                        std::process::exit(1);
+                    }
+                    println!("{}", path.display());
+                }
+            }
+        },
         Commands::Mcp => run_mcp_stdio(),
+    }
+}
+
+/// Pure MCP `resources/list` response for bundled skills.
+#[must_use]
+pub fn resources_list() -> Value {
+    let resources: Vec<Value> = makercraft_core::skills::skills_list()
+        .iter()
+        .map(|s| {
+            json!({
+                "uri": format!("skill://{}/SKILL.md", s.name),
+                "name": s.name,
+                "description": s.description,
+                "mimeType": "text/markdown",
+            })
+        })
+        .collect();
+    json!({"resources": resources})
+}
+
+/// Pure MCP `resources/read` response; returns `-32002` when URI is unknown.
+pub fn resources_read(uri: &str) -> Result<Value, (i32, String)> {
+    if let Some(s) = makercraft_core::skills::skill_by_uri(uri) {
+        Ok(json!({
+            "contents": [{
+                "uri": uri,
+                "mimeType": "text/markdown",
+                "text": s.skill_md,
+            }]
+        }))
+    } else {
+        Err((-32002, format!("resource not found: {uri}")))
     }
 }
 
@@ -426,14 +582,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn catalog_lists_fifteen_tools() {
+    fn catalog_lists_eighteen_tools() {
         let catalog = tools_list();
         let tools = catalog
             .get("tools")
             .and_then(|t| t.as_array())
             .cloned()
             .unwrap_or_default();
-        assert_eq!(tools.len(), 17);
+        assert_eq!(tools.len(), 18);
+    }
+
+    #[test]
+    fn skills_resources_and_tool_round_trip() {
+        let list = resources_list();
+        let arr = list
+            .get("resources")
+            .and_then(|r| r.as_array())
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(arr.len(), makercraft_core::skills::skills_list().len());
+        let ok = resources_read("skill://makercraft-workflow/SKILL.md");
+        assert!(ok.is_ok());
+        let missing = resources_read("skill://does-not-exist/SKILL.md");
+        assert!(matches!(missing, Err((-32002, _))));
+        let tool_res = content_text(&call_tool(
+            "makercraft_skill_read",
+            &json!({"name": "makercraft-vienna-makerspaces"}),
+        ));
+        assert!(tool_res.contains("Metalab"));
     }
 
     #[test]

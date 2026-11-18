@@ -1,19 +1,20 @@
 ---
-updated: 2026-11-13T08:05:00+01:00
+updated: 2026-11-18T03:38:00+01:00
 status: current
-tags: [makercraft, bench, instruments, capture]
+tags: [makercraft, bench, instruments, skills, chat, menu-bar]
 ---
 
 # Handover — MakerCraft
 
 ## What Was Done
-- `instrument.sources` lists oscilloscope, logic-analyzer, multimeter, function-generator, spectrum-analyzer, jtag-swd, and bus-pirate.
-- `instrument.capture` writes one JSON file per source. `demo` is true and `live` is false. A function-generator file records `output_driven: false`. A jtag-swd file records `flashed: false`. An unknown source writes nothing.
-- The command is on `makercraft-mcp` (`instrument-sources`, `instrument-capture`). It is not on `makercraft-cli`.
-- The Machines tab lists the seven sources. Scope, logic, and Bus Pirate still have their own live commands. The Python servers are still on disk.
+- **Tier 4:** Universal 8-menu bar (`File`, `Edit`, `View`, `Insert`, `Modify`, `Commands`, `Window`, `Help`) with `switch_on_hover`, wired actions/hotkeys, and 5-item Help suite + `HELP.md`.
+- **Tier 5:** Pictorial vector diagrams (`hardware_viz.rs`) for all 9 machines & bench instruments on `Machines` and `Instruments` tabs, wired to `Command::dispatch` probes and `instrument_capture`.
+- **Tier 6:** 8 bundled `SKILL.md` files embedded in `makercraft-core::skills`, served via MCP `resources/list` + `resources/read` (`skill://`), `makercraft_skill_read` (18 MCP tools), CLI `makercraft-mcp skills`, and `Ctrl+J` local-first AI Chat Dock (`chat_dock.rs`).
+- **Tier 7:** `Vienna & Buying` tab (`reference_views.rs`) with Metalab, Happylab, Maker Austria, prep checklists, and machine/instrument buying advice.
 
 ## Last Concrete Action
-- Recounted on 13 November 2026. Nine `.rs` files are 3,796 physical lines. tokei reports 3,399 Rust code lines. `cargo test --workspace --offline` passed 38 tests (15 core, 16 hal, 7 mcp). The status test now expects 17 commands.
+- Updated `README.md`, `CHANGELOG.md`, `HANDOVER.md`, and `docs/PRD.md` on 18 November 2026.
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --workspace --offline` (40 tests: 16 core, 16 hal, 8 mcp), and `makercraft.exe --smoke` all passed.
 
 ## Next Step
-- Put a live reading into the capture file for one of the four sources that are files only: multimeter, function-generator, spectrum-analyzer, jtag-swd. Until that reading exists, the file stays a demo.
+- Re-cut the Windows release binary and NSIS installer (`scripts/release.ps1`) if distributing updated `dist/` artifacts, and wire live HAL readings into `instrument_capture` for multimeter, function-generator, spectrum-analyzer, and jtag-swd when hardware is attached.

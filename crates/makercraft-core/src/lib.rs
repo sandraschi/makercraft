@@ -19,6 +19,10 @@
 #![deny(clippy::todo)]
 
 pub mod i18n;
+pub mod skills;
+
+/// Embedded repository help manual (`HELP.md`).
+pub const HELP_MD: &str = include_str!("../../../HELP.md");
 
 use makercraft_hal::{BusPiratePinState, HardwareAdapter, MachineStatus};
 use serde::{Deserialize, Serialize};

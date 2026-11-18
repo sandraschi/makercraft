@@ -5,6 +5,16 @@
 ![MCP stdio](https://img.shields.io/badge/MCP-stdio-purple)
 ![ArtCraft harness](https://img.shields.io/badge/ArtCraft-harness-green)
 
+## Install
+
+Tell Cursor, Claude, Antigravity, or OpenCode: **Install this.**
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-craft.ps1
+```
+
+Installs the Windows app, the CLI, and the MCP bundle.
+
 **MakerCraft** is an ArtCraft-tier local-first digital fabrication bench and instrument studio connecting 3D printers, CNC routers, and hardware protocol debuggers into a unified desktop and agentic interface.
 
 Features:
@@ -16,7 +26,11 @@ Features:
 - **GRBL CNC Router Control**: Toolhead coordinates, spindle speed, sub-zero plunge safety linting.
 - **Bus Pirate Protocol Bridge**: Real-time pin logic level and pullup voltage monitoring.
 - **Bench capture**: `makercraft-mcp instrument-capture` writes a labelled demo file for the oscilloscope, logic analyzer, multimeter, function generator, spectrum analyzer, JTAG/SWD adapter, and Bus Pirate. It does not drive hardware.
-- **MCP**: `makercraft-mcp mcp` speaks JSON-RPC on stdin and stdout. The window label `14130` is not a listening server.
+- **Pictorial Hardware & Instrument Studio**: Vector technical diagrams in the **Machines** and **Instruments** tabs wired to `Command::dispatch` probes and demo captures.
+- **Bundled Skills & Local-First AI Chat (`Ctrl+J`)**: 8 embedded `SKILL.md` guides (`workflow`, `klipper-printer`, `grbl-cnc`, `oscilloscope`, `logic-analyzer`, `bus-pirate`, `vienna-makerspaces`, `buying-guide`) served over MCP `resources/list`, `makercraft_skill_read`, CLI `skills`, and used as the preprompt for the in-app AI Chat Dock (Ollama / LM Studio / OpenAI-compatible).
+- **Vienna Makerspaces & Buying Guide**: Dedicated **Vienna & Buying** tab covering Metalab, Happylab, and Maker Austria plus practical hardware buying advice.
+- **Craft Menu Bar & 5-Item Help Suite**: Universal 8-menu bar (`File`, `Edit`, `View`, `Insert`, `Modify`, `Commands`, `Window`, `Help`) with `Command Palette...` (`Ctrl+K`), `Keyboard Shortcuts...` (`F1`), `Project Files & Docs...` (with Skills viewer & `HELP.md`), `Licenses & Notices...`, and `About MakerCraft`.
+- **MCP**: `makercraft-mcp mcp` speaks JSON-RPC 2.0 on stdin and stdout (18 tools + `skill://` resources). The window label `14130` is not a listening server.
 
 Reference rig (all lint bounds are tested against this):
 `Ender-3 class Klipper/Moonraker 220x220x250 + 3018 class GRBL 1.1h 300x180x45 + Bus Pirate v4 @3.3V`
@@ -25,10 +39,10 @@ Reference rig (all lint bounds are tested against this):
 
 ## Workspace Architecture
 
-1. `crates/makercraft-hal`: Hardware abstraction interfaces for Klipper, GRBL, and Bus Pirate.
-2. `crates/makercraft-core`: Real G-code parser, safety linter, machine profiles, job estimation.
-3. `crates/makercraft-mcp`: CLI plus the stdio MCP server (`makercraft-mcp`).
-4. `crates/makercraft-app`: Native GUI (`eframe`/`egui`, tabs: Preview / Safety / Machines / G-code) and CLI (`makercraft-cli`).
+1. `crates/makercraft-hal`: Hardware abstraction interfaces for Klipper, GRBL, Bus Pirate, SCPI/USBTMC scopes, and sigrok logic analyzers.
+2. `crates/makercraft-core`: Real G-code parser, safety linter, machine profiles, job estimation, and 8 embedded skills (`skills.rs`).
+3. `crates/makercraft-mcp`: CLI plus the stdio MCP server (`makercraft-mcp`, 18 tools + `skill://` resources).
+4. `crates/makercraft-app`: Native GUI (`eframe`/`egui`, tabs: Preview / Safety / Machines / Instruments / G-code / Vienna & Buying, plus `Ctrl+J` AI Chat Dock) and CLI (`makercraft-cli`).
 
 ---
 
@@ -48,13 +62,15 @@ cargo test
 ./target/debug/makercraft-cli.exe estimate sample.gcode --profile printer
 ./target/debug/makercraft-mcp.exe instrument-sources
 ./target/debug/makercraft-mcp.exe instrument-capture oscilloscope --dir $env:TEMP\makercraft-captures
+./target/debug/makercraft-mcp.exe skills list
+./target/debug/makercraft-mcp.exe skills export --to .cursor\skills
 ```
 
-## Status — 13 November 2026
+## Status — 18 November 2026
 
-**Does today:** G-code lint, printer and CNC probes, scope and logic probes, and a demo capture file for seven bench sources. The Machines tab lists those sources.
+**Does today:** G-code lint, printer and CNC probes, scope and logic probes, demo capture files for seven bench sources, Universal 8-menu bar + 5-item Help suite (`HELP.md`), pictorial vector diagrams for all 9 hardware devices, 8 bundled skills (`skill://` MCP resources + `makercraft_skill_read`), local-first AI Chat Dock (`Ctrl+J`), and the Vienna Makerspaces + Buying Guide tab.
 
-**Still open:** a live reading inside the capture file for the meter, the function generator, the spectrum analyzer, and the JTAG adapter. The menu bar in `docs/TIERED_PLAN.md` is still open.
+**Still open:** live hardware readings inside the capture file for the meter, function generator, spectrum analyzer, and JTAG adapter; re-cutting the release NSIS installer after Tiers 4–7.
 
 **Non-goals:** no hardware in CI. Heaters, spindles, and motion stay behind a confirm gate. `instrument-capture` does not drive an output or flash a chip.
 

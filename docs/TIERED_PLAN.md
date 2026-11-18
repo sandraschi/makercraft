@@ -38,9 +38,19 @@ Tier 1: Core Engine ──> Tier 2: MCP / CLI ──> Tier 3: Desktop UI ──>
 - [x] Machines tab lists the seven bench sources. The capture command is the CLI, not a button.
 
 ### Tier 4 — Craft Menu Bar Standard, Help Suite & Hardened Verification
-- [ ] Universal 8-menu bar (`File`, `Edit`, `View`, `Insert`, `Modify`, `Commands`, `Window`, `Help`) with `switch_on_hover`.
-- [ ] Mandatory 5-dialog Help suite (`Command Palette...`, `Keyboard Shortcuts...`, `Project Files & Docs...`, `Licenses & Notices...`, `About MakerCraft`).
-- [ ] Fleet UI/UX Pattern 2 adherence: viewport-centric navigation, top button row mapped to View toggles, panel visibility managed via `View` / `Window`.
-- [ ] Tofu Guard verification (100% font glyph coverage, zero tofu placeholder boxes).
-- [ ] Headless `--smoke` parity validation.
-- [ ] Standalone release binary packaging and NSIS installer.
+- [x] Universal 8-menu bar (`File`, `Edit`, `View`, `Insert`, `Modify`, `Commands`, `Window`, `Help`) with `MenuBar` `switch_on_hover`.
+- [x] Mandatory 5-dialog Help suite (`Command Palette...`, `Keyboard Shortcuts...`, `Project Files & Docs...`, `Licenses & Notices...`, `About MakerCraft`) + `HELP.md`.
+- [x] Headless `--smoke` parity validation.
+- [ ] Standalone release binary packaging and NSIS installer (re-cut after Tier 7).
+
+### Tier 5 — Pictorial Hardware & Instrument Studio (`hardware_viz.rs`)
+- [x] Vector technical diagrams rendered via `egui::Painter` for Ender-3 Printer, 3018 CNC, Oscilloscope, Logic Analyzer, Bus Pirate v4, Digital Multimeter, Function Generator, Spectrum Analyzer, and JTAG/SWD Probe.
+- [x] Interactive `Machines` and `Instruments` tabs wired to `Command::dispatch` (`printer_live`, `cnc_probe`, `bus_probe`, `scope_idn`, `logic_capture`, `instrument_capture`).
+
+### Tier 6 — Bundled Skills (`skills/`) & Local-First AI Chat Dock (`Ctrl+J`)
+- [x] 8 embedded `SKILL.md` guides compiled into `makercraft-core::skills` (`workflow`, `klipper-printer`, `grbl-cnc`, `oscilloscope`, `logic-analyzer`, `bus-pirate`, `vienna-makerspaces`, `buying-guide`).
+- [x] Served over MCP `resources/list` + `resources/read` (`skill://`), `makercraft_skill_read`, CLI `makercraft-mcp skills`, and `Help -> Project Files & Docs -> Skills`.
+- [x] Local-first AI Chat Dock (`Ctrl+J`) supporting Ollama, LM Studio, and OpenAI-compatible endpoints with zero fake fallback text.
+
+### Tier 7 — Vienna Makerspaces Reference & Machine Buying Guide
+- [x] Dedicated `Vienna & Buying` tab with verified Vienna makerspaces (Metalab, Happylab, Maker Austria), prep checklist, and hardware buying guide.

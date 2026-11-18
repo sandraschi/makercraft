@@ -25,7 +25,8 @@ local-first bench lints a toolpath *before* it touches stock.
   JSON file per source. The file is a labelled demo. It does not drive an
   output, halt a CPU, or flash firmware. Live scope, logic, and Bus Pirate
   probes stay on their existing commands.
-- **Agent surface:** 17 MCP tools over stdio, same `dispatch` as `makercraft-mcp`. `instrument.sources` and `instrument.capture` are the two added on 13 November 2026. The Machines tab lists the seven sources. `makercraft-cli` does not have the capture command.
+- **Agent surface:** 18 MCP tools over stdio (`makercraft-mcp`, including `instrument_sources`, `instrument_capture`, and `makercraft_skill_read`) plus `resources/list` & `resources/read` for 8 bundled `skill://` guides.
+- **Desktop workstation (Tiers 4–7):** Universal 8-menu bar, 5-item Help suite (`HELP.md`), interactive **Workshop & ESD Workbench Panorama** (`Workshop` tab) + pictorial vector diagrams for all 9 machines/instruments (`Machines` & `Instruments` tabs), local-first AI Chat Dock (`Ctrl+J`), and `Vienna & Buying` reference tab.
 
 ## Bench hardware lives here (no benchcraft repo)
 

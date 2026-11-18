@@ -1,5 +1,13 @@
 # CHANGELOG — MakerCraft
 
+## 2026-11-18 — Tiers 4–7: Craft Menu Bar, Pictorial Studio, Skills & AI Chat, Vienna & Buying Guide
+
+- **Tier 4 (Menu Bar & Help Suite):** Implemented the universal 8-menu bar (`File`, `Edit`, `View`, `Insert`, `Modify`, `Commands`, `Window`, `Help`) with `egui::MenuBar` `switch_on_hover`, wired hotkeys (`Ctrl+K`, `Ctrl+J`, `F1`, `F5`, `Ctrl+N/O/S/Z/Y`, `Esc` E-stop), and the 5-item Help suite (`Command Palette...`, `Keyboard Shortcuts...`, `Project Files & Docs...`, `Licenses & Notices...`, `About MakerCraft`) backed by `HELP.md`.
+- **Tier 5 (Pictorial Hardware & Workshop Studio):** Added `hardware_viz.rs` rendering vector technical diagrams via `egui::Painter` for all 9 devices (Ender-3 Printer, 3018 CNC, Oscilloscope, Logic Analyzer, Bus Pirate v4, Digital Multimeter, Function Generator, Spectrum Analyzer, JTAG/SWD Probe) across the `Machines` and `Instruments` tabs, plus an interactive **Workshop & ESD Workbench Panorama** (`Workshop` tab) with clickable stations and E-stop mushroom button wired to `Command::dispatch`.
+- **Tier 6 (Bundled Skills & AI Chat Dock):** Added 8 `SKILL.md` guides under `skills/` embedded in `makercraft-core::skills`, exposed via MCP `resources/list` + `resources/read` (`skill://`), `makercraft_skill_read` (18 tools total), CLI `makercraft-mcp skills list|show|export`, and `Help -> Project Files & Docs -> Skills`. Added `chat_dock.rs` (`Ctrl+J`) for local-first Ollama / LM Studio / OpenAI-compatible chat with zero fake fallback text.
+- **Tier 7 (Vienna Makerspaces & Buying Guide):** Added `reference_views.rs` and the `Vienna & Buying` tab covering Metalab, Happylab, and Maker Austria plus practical hardware buying advice.
+- Verified with `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --workspace --offline` (40 tests green: 1 core unit + 15 core integration + 16 hal + 8 mcp), `cargo fmt --all`, and `makercraft.exe --smoke`.
+
 ## 2026-11-13 — Bench instruments write a capture file
 
 - `instrument.sources` lists the seven repos folded into this app: oscilloscope, logic-analyzer, multimeter, function-generator, spectrum-analyzer, jtag-swd, bus-pirate.

@@ -56,10 +56,11 @@ pub fn draw_hardware_diagram(
     estop: bool,
     accent: Color32,
 ) {
+    let time = ui.ctx().input(|i| i.time);
     let (rect, _resp) = ui.allocate_exact_size(size, egui::Sense::hover());
     let p = ui.painter_at(rect);
     let bg = Color32::from_rgb(12, 18, 30);
-    let frame = Color32::from_rgb(78, 108, 150);
+    let frame = Color32::from_rgb(52, 74, 108);
     let metal = Color32::from_rgb(165, 182, 205);
     let teal = Color32::from_rgb(110, 240, 205);
     let gold = Color32::from_rgb(255, 205, 105);
@@ -69,7 +70,7 @@ pub fn draw_hardware_diagram(
     p.rect_stroke(
         rect,
         6.0,
-        Stroke::new(1.5, if estop { rose } else { frame }),
+        Stroke::new(1.2, if estop { rose } else { frame }),
         egui::StrokeKind::Inside,
     );
 
@@ -77,9 +78,9 @@ pub fn draw_hardware_diagram(
     match kind {
         HardwareKind::Printer3d => draw_printer(&p, r, metal, teal, gold, rose, estop),
         HardwareKind::CncRouter => draw_cnc(&p, r, metal, accent, gold, rose, estop),
-        HardwareKind::Oscilloscope => draw_scope(&p, r, metal, teal, gold),
+        HardwareKind::Oscilloscope => draw_scope(&p, r, metal, teal, gold, time),
         HardwareKind::LogicAnalyzer => draw_logic(&p, r, metal, teal, gold, rose),
-        HardwareKind::BusPirate => draw_bus_pirate(&p, r, metal, teal, gold, rose),
+        HardwareKind::BusPirate => draw_bus_pirate(&p, r, metal, teal, gold, rose, time),
         HardwareKind::Multimeter => draw_dmm(&p, r, metal, gold, rose, teal),
         HardwareKind::FunctionGenerator => draw_fgen(&p, r, metal, teal, gold),
         HardwareKind::SpectrumAnalyzer => draw_spectrum(&p, r, metal, gold, teal),
@@ -229,7 +230,7 @@ fn draw_cnc(
     );
 }
 
-fn draw_scope(p: &egui::Painter, r: Rect, metal: Color32, teal: Color32, gold: Color32) {
+fn draw_scope(p: &egui::Painter, r: Rect, metal: Color32, teal: Color32, gold: Color32, time: f64) {
     let scr = Rect::from_min_max(
         Pos2::new(r.left() + 6.0, r.top() + 18.0),
         Pos2::new(r.right() - 62.0, r.bottom() - 22.0),
@@ -251,12 +252,14 @@ fn draw_scope(p: &egui::Painter, r: Rect, metal: Color32, teal: Color32, gold: C
             Stroke::new(0.7, Color32::from_rgb(30, 52, 74)),
         );
     }
-    // CH1 sine wave
+    // CH1 animated sine wave
+    let phase = (time * 2.2) as f32;
     let mut pts = Vec::with_capacity(48);
     for i in 0..48 {
         let t = i as f32 / 47.0;
         let x = scr.left() + t * scr.width();
-        let y = scr.center().y - (t * std::f32::consts::TAU * 2.5).sin() * (scr.height() * 0.34);
+        let y = scr.center().y
+            - (t * std::f32::consts::TAU * 2.5 + phase).sin() * (scr.height() * 0.34);
         pts.push(Pos2::new(x, y));
     }
     p.add(egui::Shape::line(pts, Stroke::new(2.0, gold)));
@@ -339,6 +342,7 @@ fn draw_bus_pirate(
     teal: Color32,
     gold: Color32,
     rose: Color32,
+    time: f64,
 ) {
     let pcb = r.shrink2(Vec2::new(10.0, 16.0));
     p.rect_filled(pcb, 4.0, Color32::from_rgb(16, 62, 46));
@@ -358,9 +362,18 @@ fn draw_bus_pirate(
         2.0,
         metal,
     );
-    // Status LEDs
+    // Pulsing status LEDs
+    let blink = ((time * 2.0).sin() > 0.0) as u8;
     p.circle_filled(Pos2::new(pcb.left() + 26.0, pcb.top() + 16.0), 3.5, teal);
-    p.circle_filled(Pos2::new(pcb.left() + 38.0, pcb.top() + 16.0), 3.5, gold);
+    p.circle_filled(
+        Pos2::new(pcb.left() + 38.0, pcb.top() + 16.0),
+        3.5,
+        if blink == 1 {
+            gold
+        } else {
+            Color32::from_rgb(100, 80, 35)
+        },
+    );
     p.circle_filled(Pos2::new(pcb.left() + 50.0, pcb.top() + 16.0), 3.5, rose);
     p.text(
         Pos2::new(pcb.left() + 20.0, pcb.center().y - 6.0),
@@ -515,13 +528,14 @@ pub fn draw_workshop_panorama(
     estop: bool,
     selected: Option<HardwareKind>,
 ) -> WorkshopAction {
+    let time = ui.ctx().input(|i| i.time);
     let w = width.max(680.0);
-    let h = 420.0;
+    let h = 430.0;
     let (canvas, resp) = ui.allocate_exact_size(Vec2::new(w, h), egui::Sense::click());
     let p = ui.painter_at(canvas);
 
-    let wall_bg = Color32::from_rgb(13, 18, 28);
-    let pegboard_bg = Color32::from_rgb(24, 32, 48);
+    let wall_bg = Color32::from_rgb(11, 16, 27);
+    let pegboard_bg = Color32::from_rgb(20, 28, 43);
     let bench_wood = Color32::from_rgb(112, 78, 46);
     let bench_edge = Color32::from_rgb(82, 54, 30);
     let steel_leg = Color32::from_rgb(48, 58, 74);
@@ -531,12 +545,36 @@ pub fn draw_workshop_panorama(
     let gold = Color32::from_rgb(255, 205, 105);
     let rose = Color32::from_rgb(255, 115, 115);
 
-    // 1. Workshop wall & floor
+    // 1. Workshop wall, subtle CAD blueprint grid & floor
     p.rect_filled(canvas, 8.0, wall_bg);
+    let grid_col = Color32::from_rgb(19, 27, 42);
+    let step = 28.0;
+    let mut gx = canvas.left() + step;
+    while gx < canvas.right() {
+        p.line_segment(
+            [
+                Pos2::new(gx, canvas.top() + 4.0),
+                Pos2::new(gx, canvas.bottom() - 4.0),
+            ],
+            Stroke::new(0.7, grid_col),
+        );
+        gx += step;
+    }
+    let mut gy = canvas.top() + step;
+    while gy < canvas.bottom() {
+        p.line_segment(
+            [
+                Pos2::new(canvas.left() + 4.0, gy),
+                Pos2::new(canvas.right() - 4.0, gy),
+            ],
+            Stroke::new(0.7, grid_col),
+        );
+        gy += step;
+    }
     p.rect_stroke(
         canvas,
         8.0,
-        Stroke::new(1.5, Color32::from_rgb(60, 82, 115)),
+        Stroke::new(1.2, Color32::from_rgb(46, 64, 94)),
         egui::StrokeKind::Inside,
     );
     let floor_y = canvas.bottom() - 28.0;
@@ -819,7 +857,7 @@ pub fn draw_workshop_panorama(
         selected == Some(HardwareKind::Oscilloscope),
         gold,
     );
-    draw_scope(&p, scope_rect.shrink(6.0), metal, teal, gold);
+    draw_scope(&p, scope_rect.shrink(6.0), metal, teal, gold, time);
 
     draw_station_frame(
         &p,
@@ -839,12 +877,24 @@ pub fn draw_workshop_panorama(
     );
     draw_spectrum(&p, spec_rect.shrink(6.0), metal, gold, teal);
 
-    // ESD Mat on Desk Surface
+    // ESD Mat on Desk Surface + DUT Breadboard
     let mat_rect = Rect::from_min_max(
         Pos2::new(bench2.left() + 8.0, bench_y - 12.0),
         Pos2::new(bench2.right() - 8.0, bench_y + 4.0),
     );
     p.rect_filled(mat_rect, 2.0, esd_mat);
+    let dut_rect = Rect::from_center_size(
+        Pos2::new(bench2.center().x - 36.0, bench_y - 4.0),
+        Vec2::new(82.0, 14.0),
+    );
+    p.rect_filled(dut_rect, 2.0, Color32::from_rgb(225, 232, 240));
+    p.text(
+        dut_rect.center(),
+        egui::Align2::CENTER_CENTER,
+        "DUT PCB",
+        egui::FontId::monospace(8.5),
+        Color32::BLACK,
+    );
     p.text(
         Pos2::new(mat_rect.right() - 8.0, mat_rect.center().y),
         egui::Align2::RIGHT_CENTER,
@@ -856,7 +906,7 @@ pub fn draw_workshop_panorama(
     // 4 desk instruments on the ESD bench
     let desk_w = (bench2.width() - 36.0) / 4.0;
     let desk_top = shelf_y + 14.0;
-    let desk_bot = bench_y - 14.0;
+    let desk_bot = bench_y - 16.0;
     let logic_rect = Rect::from_min_max(
         Pos2::new(bench2.left(), desk_top),
         Pos2::new(bench2.left() + desk_w, desk_bot),
@@ -890,7 +940,35 @@ pub fn draw_workshop_panorama(
         selected == Some(HardwareKind::BusPirate),
         teal,
     );
-    draw_bus_pirate(&p, bus_rect.shrink(6.0), metal, teal, gold, rose);
+    draw_bus_pirate(&p, bus_rect.shrink(6.0), metal, teal, gold, rose, time);
+
+    // Smooth Bezier jumper cables from Logic Analyzer & Bus Pirate to DUT PCB
+    p.add(egui::Shape::CubicBezier(
+        egui::epaint::CubicBezierShape::from_points_stroke(
+            [
+                Pos2::new(logic_rect.center().x, logic_rect.bottom()),
+                Pos2::new(logic_rect.center().x, bench_y + 6.0),
+                Pos2::new(dut_rect.left() + 10.0, bench_y + 6.0),
+                Pos2::new(dut_rect.left() + 16.0, dut_rect.center().y),
+            ],
+            false,
+            Color32::TRANSPARENT,
+            Stroke::new(1.6, gold),
+        ),
+    ));
+    p.add(egui::Shape::CubicBezier(
+        egui::epaint::CubicBezierShape::from_points_stroke(
+            [
+                Pos2::new(bus_rect.center().x, bus_rect.bottom()),
+                Pos2::new(bus_rect.center().x, bench_y + 6.0),
+                Pos2::new(dut_rect.right() - 10.0, bench_y + 6.0),
+                Pos2::new(dut_rect.right() - 16.0, dut_rect.center().y),
+            ],
+            false,
+            Color32::TRANSPARENT,
+            Stroke::new(1.6, teal),
+        ),
+    ));
 
     draw_station_frame(
         &p,

@@ -23,15 +23,15 @@ struct Args {
     smoke: bool,
 }
 
-// Ultra-contrast bench palette (pure white on near-black).
-const INK_BG: egui::Color32 = egui::Color32::from_rgb(5, 8, 16);
-const CARD_BG: egui::Color32 = egui::Color32::from_rgb(14, 20, 34);
+// Precision Lab / Industrial Slate palette.
+const INK_BG: egui::Color32 = egui::Color32::from_rgb(11, 16, 27);
+const CARD_BG: egui::Color32 = egui::Color32::from_rgb(18, 25, 40);
 const GOLD: egui::Color32 = egui::Color32::from_rgb(255, 205, 105);
-const PAPER: egui::Color32 = egui::Color32::from_rgb(255, 255, 255);
-const MIST: egui::Color32 = egui::Color32::from_rgb(208, 228, 252);
-const TEAL: egui::Color32 = egui::Color32::from_rgb(130, 245, 210);
-const ROSE: egui::Color32 = egui::Color32::from_rgb(255, 135, 135);
-const LINE_BRIGHT: egui::Color32 = egui::Color32::from_rgb(90, 130, 185);
+const PAPER: egui::Color32 = egui::Color32::from_rgb(242, 246, 252);
+const MIST: egui::Color32 = egui::Color32::from_rgb(186, 206, 232);
+const TEAL: egui::Color32 = egui::Color32::from_rgb(110, 240, 205);
+const ROSE: egui::Color32 = egui::Color32::from_rgb(255, 125, 125);
+const LINE_BRIGHT: egui::Color32 = egui::Color32::from_rgb(48, 72, 112);
 const OK_GREEN: egui::Color32 = egui::Color32::from_rgb(120, 255, 170);
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -59,6 +59,8 @@ pub struct MakerCraftApp {
     preview_pan: egui::Vec2,
     show_grid: bool,
     show_rapids: bool,
+    z_filter_enabled: bool,
+    z_filter_max: f64,
     show_telemetry_panel: bool,
     estop: bool,
     is_dark_theme: bool,
@@ -107,6 +109,8 @@ impl MakerCraftApp {
             preview_pan: egui::Vec2::ZERO,
             show_grid: true,
             show_rapids: true,
+            z_filter_enabled: false,
+            z_filter_max: 25.0,
             show_telemetry_panel: true,
             estop: false,
             is_dark_theme: true,
@@ -265,11 +269,92 @@ impl MakerCraftApp {
 }
 
 fn big_heading(ui: &mut egui::Ui, text: &str) {
-    ui.label(egui::RichText::new(text).size(27.0).strong());
+    ui.label(egui::RichText::new(text).size(22.0).strong());
 }
 
 fn body_text(ui: &mut egui::Ui, text: &str) {
-    ui.label(egui::RichText::new(text).size(17.5));
+    ui.label(egui::RichText::new(text).size(15.0));
+}
+
+fn highlight_gcode_job(text: &str, dark: bool) -> egui::text::LayoutJob {
+    let mut job = egui::text::LayoutJob::default();
+    let font = egui::FontId::monospace(14.0);
+    let comment_col = if dark {
+        egui::Color32::from_rgb(120, 140, 170)
+    } else {
+        egui::Color32::from_rgb(100, 115, 135)
+    };
+    let coord_col = if dark {
+        MIST
+    } else {
+        egui::Color32::from_rgb(35, 70, 130)
+    };
+    let feed_col = if dark {
+        TEAL
+    } else {
+        egui::Color32::from_rgb(0, 120, 95)
+    };
+    let rapid_col = if dark {
+        GOLD
+    } else {
+        egui::Color32::from_rgb(175, 105, 0)
+    };
+    let mcode_col = if dark {
+        ROSE
+    } else {
+        egui::Color32::from_rgb(185, 35, 45)
+    };
+    let base_col = if dark { PAPER } else { egui::Color32::BLACK };
+
+    for line in text.split_inclusive('\n') {
+        let (code_part, comment_part) = if let Some(idx) = line.find(';') {
+            (&line[..idx], &line[idx..])
+        } else {
+            (line, "")
+        };
+        let mut i = 0;
+        let bytes = code_part.as_bytes();
+        while i < bytes.len() {
+            if bytes[i].is_ascii_whitespace() {
+                let start = i;
+                while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+                    i += 1;
+                }
+                job.append(
+                    &code_part[start..i],
+                    0.0,
+                    egui::TextFormat::simple(font.clone(), base_col),
+                );
+            } else {
+                let start = i;
+                while i < bytes.len() && !bytes[i].is_ascii_whitespace() {
+                    i += 1;
+                }
+                let tok = &code_part[start..i];
+                let up = tok.to_ascii_uppercase();
+                let color = if up == "G0" || up == "G00" {
+                    rapid_col
+                } else if up.starts_with('G') {
+                    feed_col
+                } else if up.starts_with('M') {
+                    mcode_col
+                } else if up.starts_with(['X', 'Y', 'Z', 'F', 'S', 'E']) {
+                    coord_col
+                } else {
+                    base_col
+                };
+                job.append(tok, 0.0, egui::TextFormat::simple(font.clone(), color));
+            }
+        }
+        if !comment_part.is_empty() {
+            job.append(
+                comment_part,
+                0.0,
+                egui::TextFormat::simple(font.clone(), comment_col),
+            );
+        }
+    }
+    job
 }
 
 impl eframe::App for MakerCraftApp {
@@ -316,6 +401,29 @@ impl eframe::App for MakerCraftApp {
         self.chat.poll();
         if self.chat.busy {
             ui.ctx().request_repaint();
+        }
+        if matches!(self.active_tab, BenchTab::Workshop | BenchTab::Instruments) {
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(60));
+        }
+
+        // Drag-and-drop G-code file loading
+        let dropped = ui.ctx().input(|i| i.raw.dropped_files.clone());
+        for file in dropped {
+            let path = file.path();
+            if !path.as_os_str().is_empty() {
+                match std::fs::read_to_string(path) {
+                    Ok(contents) => {
+                        self.file_path_input = path.to_string_lossy().to_string();
+                        self.set_gcode(contents);
+                        self.active_tab = BenchTab::Preview;
+                        self.status_msg = format!("Dropped & loaded {}", path.display());
+                    }
+                    Err(e) => {
+                        self.status_msg = format!("Drop failed: {e}");
+                    }
+                }
+            }
         }
 
         // Global keyboard shortcuts
@@ -965,6 +1073,17 @@ impl eframe::App for MakerCraftApp {
                         );
                     }
                 });
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut self.show_grid, "Bed Grid");
+                    ui.checkbox(&mut self.show_rapids, "Rapids (G0)");
+                    ui.checkbox(&mut self.z_filter_enabled, "Z-Layer Filter");
+                    if self.z_filter_enabled {
+                        ui.add(
+                            egui::Slider::new(&mut self.z_filter_max, -10.0..=250.0)
+                                .text("Max Z mm"),
+                        );
+                    }
+                });
                 ui.add_space(4.0);
                 let (rect, response) = ui.allocate_exact_size(
                     egui::vec2(ui.available_width(), 420.0),
@@ -979,11 +1098,11 @@ impl eframe::App for MakerCraftApp {
                     self.preview_pan += response.drag_delta();
                 }
                 let painter = ui.painter();
-                painter.rect_filled(rect, 6.0, egui::Color32::BLACK);
+                painter.rect_filled(rect, 6.0, INK_BG);
                 painter.rect_stroke(
                     rect,
                     6.0,
-                    egui::Stroke::new(3.0, GOLD),
+                    egui::Stroke::new(1.5, LINE_BRIGHT),
                     egui::StrokeKind::Inside,
                 );
                 match MakerEngine::preview_segments(&self.gcode_buffer) {
@@ -1002,8 +1121,28 @@ impl eframe::App for MakerCraftApp {
                                 rect.center().y - ((y - cy) as f32 * scale) + self.preview_pan.y,
                             )
                         };
-                        // Bed outline for the active profile.
+                        // Bed outline + optional 20mm grid for the active profile.
                         let p = self.profile();
+                        if self.show_grid {
+                            let grid_stroke =
+                                egui::Stroke::new(0.7, egui::Color32::from_rgb(24, 34, 52));
+                            let mut gx = 0.0;
+                            while gx <= p.bed_x_mm {
+                                painter.line_segment(
+                                    [to_screen(gx, 0.0), to_screen(gx, p.bed_y_mm)],
+                                    grid_stroke,
+                                );
+                                gx += 20.0;
+                            }
+                            let mut gy = 0.0;
+                            while gy <= p.bed_y_mm {
+                                painter.line_segment(
+                                    [to_screen(0.0, gy), to_screen(p.bed_x_mm, gy)],
+                                    grid_stroke,
+                                );
+                                gy += 20.0;
+                            }
+                        }
                         let bed = [
                             to_screen(0.0, 0.0),
                             to_screen(p.bed_x_mm, 0.0),
@@ -1013,15 +1152,21 @@ impl eframe::App for MakerCraftApp {
                         ];
                         painter.add(egui::Shape::line(
                             bed.to_vec(),
-                            egui::Stroke::new(2.0, LINE_BRIGHT),
+                            egui::Stroke::new(1.8, GOLD),
                         ));
                         for seg in &path.segments {
+                            if seg.rapid && !self.show_rapids {
+                                continue;
+                            }
+                            if self.z_filter_enabled && seg.to_z_mm > self.z_filter_max {
+                                continue;
+                            }
                             let a = to_screen(seg.from_x_mm, seg.from_y_mm);
                             let b = to_screen(seg.to_x_mm, seg.to_y_mm);
                             let stroke = if seg.rapid {
-                                egui::Stroke::new(1.5, ROSE)
+                                egui::Stroke::new(1.4, ROSE)
                             } else {
-                                egui::Stroke::new(2.5, TEAL)
+                                egui::Stroke::new(2.4, TEAL)
                             };
                             painter.line_segment([a, b], stroke);
                         }
@@ -1263,7 +1408,18 @@ impl eframe::App for MakerCraftApp {
                     }
                 });
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    ui.text_edit_multiline(&mut self.gcode_buffer);
+                    let mut layouter = |ui: &egui::Ui, buf: &dyn egui::TextBuffer, wrap_width: f32| {
+                        let mut job = highlight_gcode_job(buf.as_str(), self.is_dark_theme);
+                        job.wrap.max_width = wrap_width;
+                        ui.fonts_mut(|f| f.layout_job(job))
+                    };
+                    ui.add(
+                        egui::TextEdit::multiline(&mut self.gcode_buffer)
+                            .desired_width(f32::INFINITY)
+                            .desired_rows(24)
+                            .font(egui::TextStyle::Monospace)
+                            .layouter(&mut layouter),
+                    );
                 });
             }
             }

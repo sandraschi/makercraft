@@ -276,6 +276,29 @@ fn body_text(ui: &mut egui::Ui, text: &str) {
     ui.label(egui::RichText::new(text).size(15.0));
 }
 
+fn draw_mini_sparkline(ui: &mut egui::Ui, samples: &[f32], color: egui::Color32) {
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(250.0, 22.0), egui::Sense::hover());
+    let p = ui.painter_at(rect);
+    p.rect_filled(rect, 3.0, INK_BG);
+    if samples.len() < 2 {
+        return;
+    }
+    let min_v = samples.iter().copied().fold(f32::INFINITY, f32::min);
+    let max_v = samples.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    let span = (max_v - min_v).max(1.0);
+    let pts: Vec<egui::Pos2> = samples
+        .iter()
+        .enumerate()
+        .map(|(i, v)| {
+            let x =
+                rect.left() + 4.0 + (i as f32 / (samples.len() - 1) as f32) * (rect.width() - 8.0);
+            let y = rect.bottom() - 3.0 - ((*v - min_v) / span) * (rect.height() - 6.0);
+            egui::pos2(x, y)
+        })
+        .collect();
+    p.add(egui::Shape::line(pts, egui::Stroke::new(1.5, color)));
+}
+
 fn highlight_gcode_job(text: &str, dark: bool) -> egui::text::LayoutJob {
     let mut job = egui::text::LayoutJob::default();
     let font = egui::FontId::monospace(14.0);
@@ -562,6 +585,12 @@ impl eframe::App for MakerCraftApp {
                         self.active_tab = BenchTab::Preview;
                         ui.close();
                     }
+                    if ui.button("Sample CNC Arc (G2 Circle)").clicked() {
+                        self.profile_cnc = true;
+                        self.set_gcode("G90\nG21\nG0 Z25.0 F3000\nG0 X80 Y50\nG1 Z-1.0 F300\nG2 X80 Y50 I-30 J0 F900\nG0 Z25\nM2".to_string());
+                        self.active_tab = BenchTab::Preview;
+                        ui.close();
+                    }
                     if ui.button("Sample Printer Calibration Frame").clicked() {
                         self.profile_cnc = false;
                         self.set_gcode("G90\nG21\nM104 S205\nM140 S60\nG0 Z0.3 F3000\nG1 X20 Y20 F1500\nG1 X120 Y20 E4.0\nG1 X120 Y120 E8.0\nG1 X20 Y120 E12.0\nG1 X20 Y20 E16.0\nG0 Z20\nM104 S0\nM140 S0\nM2".to_string());
@@ -816,6 +845,19 @@ impl eframe::App for MakerCraftApp {
                         ))
                         .size(16.0),
                     );
+                    draw_mini_sparkline(
+                        ui,
+                        &[
+                            205.0,
+                            207.2,
+                            209.5,
+                            210.1,
+                            209.8,
+                            210.0,
+                            printer.extruder_or_spindle_temp as f32,
+                        ],
+                        TEAL,
+                    );
                 });
 
                 let cnc = MakerEngine::get_cnc_status();
@@ -834,6 +876,19 @@ impl eframe::App for MakerCraftApp {
                             cnc.extruder_or_spindle_temp
                         ))
                         .size(16.0),
+                    );
+                    draw_mini_sparkline(
+                        ui,
+                        &[
+                            8500.0,
+                            9200.0,
+                            9800.0,
+                            10000.0,
+                            9950.0,
+                            10020.0,
+                            cnc.extruder_or_spindle_temp as f32,
+                        ],
+                        GOLD,
                     );
                 });
 

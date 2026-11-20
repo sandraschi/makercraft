@@ -215,3 +215,15 @@ fn instrument_capture_writes_a_demo_file_and_refuses_an_unknown_source() {
     let bad = capture_instrument("benchcraft", &dir.display().to_string());
     assert!(bad.get("error").is_some(), "{bad}");
 }
+
+#[test]
+fn test_g2_g3_arc_interpolation() {
+    let gcode = "G21\nG90\nG0 X40 Y20 Z5\nG1 Z-1 F300\nG2 X40 Y20 I-20 J0 F800\nG0 Z25\nM2";
+    let preview = MakerEngine::preview_segments(gcode).expect("preview");
+    // 1 rapid XY, 1 plunge, 24 arc steps, 1 retract = 27 segments
+    assert_eq!(preview.segments.len(), 27);
+    let report = MakerEngine::lint_gcode(gcode).expect("lint");
+    assert!(report.passes_safety);
+    // Full circle r=20 circumference ~ 125.66mm + XY/Z moves
+    assert!(report.travel_distance_mm > 150.0);
+}

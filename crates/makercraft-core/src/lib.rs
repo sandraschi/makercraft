@@ -244,11 +244,83 @@ fn parse_toolpath(gcode: &str) -> Result<(ParsedToolpath, Vec<String>, bool, boo
                     pos = target;
                 }
                 2 | 3 => {
-                    // Arc: approximate endpoint like a linear move, warn once.
+                    // Circular arc (G2 CW, G3 CCW) with I/J center offsets; falls back to linear if I/J omitted.
                     seen_motion = true;
                     let unit = if inches { 25.4 } else { 1.0 };
-                    let nx = param('X').map(|v| v * unit).unwrap_or(pos.0);
-                    let ny = param('Y').map(|v| v * unit).unwrap_or(pos.1);
+                    let nx = param('X')
+                        .map(|v| if absolute { v * unit } else { pos.0 + v * unit })
+                        .unwrap_or(pos.0);
+                    let ny = param('Y')
+                        .map(|v| if absolute { v * unit } else { pos.1 + v * unit })
+                        .unwrap_or(pos.1);
+                    let nz = param('Z')
+                        .map(|v| if absolute { v * unit } else { pos.2 + v * unit })
+                        .unwrap_or(pos.2);
+                    if let Some(f) = param('F') {
+                        feed = f * unit;
+                    }
+                    let i_off = param('I').map(|v| v * unit);
+                    let j_off = param('J').map(|v| v * unit);
+                    if i_off.is_some() || j_off.is_some() {
+                        let cx = pos.0 + i_off.unwrap_or(0.0);
+                        let cy = pos.1 + j_off.unwrap_or(0.0);
+                        let r = ((pos.0 - cx).powi(2) + (pos.1 - cy).powi(2)).sqrt();
+                        if r > 1e-6 {
+                            let a0 = (pos.1 - cy).atan2(pos.0 - cx);
+                            let a1 = (ny - cy).atan2(nx - cx);
+                            let mut sweep = if n == 2 {
+                                // Clockwise: negative angle delta
+                                let mut d = a1 - a0;
+                                if d >= 0.0 {
+                                    d -= std::f64::consts::TAU;
+                                }
+                                d
+                            } else {
+                                // Counter-clockwise: positive angle delta
+                                let mut d = a1 - a0;
+                                if d <= 0.0 {
+                                    d += std::f64::consts::TAU;
+                                }
+                                d
+                            };
+                            if (nx - pos.0).abs() < 1e-5 && (ny - pos.1).abs() < 1e-5 {
+                                sweep = if n == 2 {
+                                    -std::f64::consts::TAU
+                                } else {
+                                    std::f64::consts::TAU
+                                };
+                            }
+                            let steps = 24usize;
+                            let mut prev = pos;
+                            for s in 1..=steps {
+                                let t = s as f64 / steps as f64;
+                                let ang = a0 + sweep * t;
+                                let px = if s == steps { nx } else { cx + r * ang.cos() };
+                                let py = if s == steps { ny } else { cy + r * ang.sin() };
+                                let pz = pos.2 + (nz - pos.2) * t;
+                                segments.push(ToolpathSegment {
+                                    line_no,
+                                    rapid: false,
+                                    from_x_mm: prev.0,
+                                    from_y_mm: prev.1,
+                                    from_z_mm: prev.2,
+                                    to_x_mm: px,
+                                    to_y_mm: py,
+                                    to_z_mm: pz,
+                                    feed_mm_min: feed,
+                                });
+                                min_x = min_x.min(px);
+                                max_x = max_x.max(px);
+                                min_y = min_y.min(py);
+                                max_y = max_y.max(py);
+                                min_z = min_z.min(pz);
+                                max_z = max_z.max(pz);
+                                prev = (px, py, pz);
+                            }
+                            pos = (nx, ny, nz);
+                            continue;
+                        }
+                    }
                     segments.push(ToolpathSegment {
                         line_no,
                         rapid: false,
@@ -257,14 +329,19 @@ fn parse_toolpath(gcode: &str) -> Result<(ParsedToolpath, Vec<String>, bool, boo
                         from_z_mm: pos.2,
                         to_x_mm: nx,
                         to_y_mm: ny,
-                        to_z_mm: pos.2,
+                        to_z_mm: nz,
                         feed_mm_min: feed,
                     });
+                    min_x = min_x.min(nx);
+                    max_x = max_x.max(nx);
+                    min_y = min_y.min(ny);
+                    max_y = max_y.max(ny);
+                    min_z = min_z.min(nz);
+                    max_z = max_z.max(nz);
                     notes.push(format!(
-                        "line {line_no}: G{n} arc approximated as straight move"
+                        "line {line_no}: G{n} arc without I/J approximated as straight move"
                     ));
-                    pos.0 = nx;
-                    pos.1 = ny;
+                    pos = (nx, ny, nz);
                 }
                 _ => {}
             }

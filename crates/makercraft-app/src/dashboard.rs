@@ -410,6 +410,19 @@ impl DashboardState {
                                         {
                                             move_req = Some((card.id, 1));
                                         }
+                                        if ui.small_button("Run").clicked() {
+                                            let st = card.station.to_lowercase();
+                                            if st.contains("cnc") {
+                                                action = DashboardAction::LoadSafeCnc;
+                                            } else if st.contains("ender")
+                                                || st.contains("klipper")
+                                                || st.contains("print")
+                                            {
+                                                action = DashboardAction::LoadPrinterCalibration;
+                                            } else {
+                                                action = DashboardAction::OpenInstruments;
+                                            }
+                                        }
                                         if ui.small_button("Del").clicked() {
                                             del_req = Some(card.id);
                                         }

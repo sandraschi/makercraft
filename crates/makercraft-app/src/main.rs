@@ -3,6 +3,7 @@ mod dashboard;
 mod hardware_viz;
 mod reference_views;
 mod viewer3d;
+mod welcome;
 
 use chat_dock::ChatDockState;
 use clap::Parser;
@@ -18,6 +19,7 @@ use reference_views::{
 };
 use serde_json::json;
 use viewer3d::{Viewer3dOpts, Viewer3dState};
+use welcome::{WelcomeAction, WelcomeState};
 
 #[derive(Parser, Debug)]
 #[command(name = "makercraft", about = "MakerCraft Digital Fabrication Studio")]
@@ -128,6 +130,7 @@ pub struct MakerCraftApp {
     selected_station: Option<HardwareKind>,
     buying_guide: BuyingGuideState,
     dashboard: DashboardState,
+    welcome: WelcomeState,
     chat: ChatDockState,
 }
 
@@ -183,6 +186,7 @@ impl MakerCraftApp {
             selected_station: Some(HardwareKind::Printer3d),
             buying_guide: BuyingGuideState::default(),
             dashboard: DashboardState::new(),
+            welcome: WelcomeState::default(),
             chat: ChatDockState::default(),
         }
     }
@@ -788,6 +792,10 @@ impl eframe::App for MakerCraftApp {
                 });
 
                 ui.menu_button("Help", |ui| {
+                    if ui.button("Welcome Screen...").clicked() {
+                        self.welcome.open = true;
+                        ui.close();
+                    }
                     if ui.button("Command Palette... (Ctrl+K)").clicked() {
                         self.show_command_palette = true;
                         ui.close();
@@ -1815,6 +1823,27 @@ impl eframe::App for MakerCraftApp {
                         }
                     });
                 });
+        }
+
+        // Modal: Welcome Screen (First-Time User Studio Onboarding)
+        match self.welcome.draw(ui.ctx()) {
+            WelcomeAction::LaunchDemo3d => {
+                self.active_profile = ActiveProfile::Cnc3018;
+                self.set_gcode("G90\nG21\nG0 Z25.0 F3000\nG0 X80 Y50\nG1 Z-1.0 F300\nG2 X80 Y50 I-30 J0 F900\nG0 Z25\nM2".to_string());
+                self.stl_mesh = Some(sample_calibration_part_stl());
+                self.preview_3d = true;
+                self.active_tab = BenchTab::Preview;
+                self.status_msg = "Loaded 3D Calibration STL + G2 Arc Demo".to_string();
+            }
+            WelcomeAction::OpenWorkshop => {
+                self.active_tab = BenchTab::Workshop;
+                self.status_msg = "Workshop & ESD Workbench ready".to_string();
+            }
+            WelcomeAction::OpenDashboardGuide => {
+                self.active_tab = BenchTab::Dashboard;
+                self.status_msg = "Guided Quickstart & Project Kanban".to_string();
+            }
+            WelcomeAction::EnterWorkspace | WelcomeAction::None => {}
         }
 
         // Modal: About Dialog

@@ -14,7 +14,7 @@ use makercraft_core::{
 };
 use reference_views::{
     render_help_docs_window, render_licenses_window, render_shortcuts_window,
-    render_vienna_and_buying_tab, HelpDocTab,
+    render_vienna_and_buying_tab, BuyingGuideState, HelpDocTab,
 };
 use serde_json::json;
 use viewer3d::{Viewer3dOpts, Viewer3dState};
@@ -126,6 +126,7 @@ pub struct MakerCraftApp {
     file_path_input: String,
     last_probe_json: String,
     selected_station: Option<HardwareKind>,
+    buying_guide: BuyingGuideState,
     dashboard: DashboardState,
     chat: ChatDockState,
 }
@@ -180,6 +181,7 @@ impl MakerCraftApp {
             file_path_input: "sample.gcode".to_string(),
             last_probe_json: String::new(),
             selected_station: Some(HardwareKind::Printer3d),
+            buying_guide: BuyingGuideState::default(),
             dashboard: DashboardState::new(),
             chat: ChatDockState::default(),
         }

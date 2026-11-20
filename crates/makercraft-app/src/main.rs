@@ -1825,7 +1825,7 @@ impl eframe::App for MakerCraftApp {
                 .show(ui.ctx(), |ui| {
                     ui.heading("MakerCraft Studio");
                     ui.label("Sovereign digital fabrication, CNC, and 3D printing studio.");
-                    ui.label("Version: v0.2.0");
+                    ui.label("Version: v0.3.0");
                     ui.label("Control Port: 14130");
                     ui.separator();
                     ui.label("Real G-code parser: modal G0/G1, G90/G91, G20/G21, arcs noted, envelope + plunge + feed + temp gates.");
@@ -1848,7 +1848,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let preview = MakerEngine::preview_segments("G21\nG90\nG1 X10 Y10\nX20")?;
         let smoke_payload = json!({
             "app": "makercraft",
-            "version": "0.2.0",
+            "version": "0.3.0",
             "status": "ready",
             "control_port": 14130,
             "success": true,

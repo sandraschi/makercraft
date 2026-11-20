@@ -1595,7 +1595,7 @@ dependencies = [
 
 [[package]]
 name = "makercraft-app"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "clap",
@@ -1613,7 +1613,7 @@ dependencies = [
 
 [[package]]
 name = "makercraft-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "makercraft-hal",
@@ -1626,7 +1626,7 @@ dependencies = [
 
 [[package]]
 name = "makercraft-hal"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "reqwest",
@@ -1640,7 +1640,7 @@ dependencies = [
 
 [[package]]
 name = "makercraft-mcp"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "clap",

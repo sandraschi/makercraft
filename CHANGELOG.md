@@ -1,5 +1,12 @@
 # CHANGELOG — MakerCraft
 
+## 2026-11-20 — v0.3.0: 3D Orbit/STL Viewer, Multi-Printer Profiles, Buying Matrices & Expanded Help
+
+- **Interactive 3D Orbit & STL Viewer (`viewer3d.rs`, `makercraft-core`):** Added rotatable 3D build-volume viewer (`3D Orbit` / `2D XY` toggle), ASCII/binary `.stl` mesh parser + drag-and-drop `.gcode`/`.stl` loading, Z-layer scrubber, and `G2/G3` circular arc tessellation.
+- **Expanded 3D Printer Suite:** Added Prusa MK4S, Bambu Lab X1C/P1S, and Voron 2.4 350 profiles alongside Ender-3 Klipper and 3018 GRBL CNC, plus PLA/PETG/ABS/TPU material presets and `E`-word filament length/weight/cost estimation.
+- **Polish & Kanban:** Industrial Slate palette, G-code syntax highlighting (`LayoutJob`), telemetry sparklines, animated Workshop oscilloscope/LEDs + DUT PCB Bezier cables, and 1-click Kanban `Run` actions.
+- **Device Acquisition Matrices & 10-Item Help Menu:** Interactive fit-scored matrices for 3D printers, display-less & benchtop oscilloscopes, logic analyzers, and desktop CNCs; expanded Help menu with `Getting Started...`, `Usage...`, `Tips & Tricks...`, `Common Pitfalls & Safety...`, `Planned Extensions...`, and `Bundled Skills (8)...`.
+
 ## 2026-11-18 — Tiers 4–7: Craft Menu Bar, Pictorial Studio, Skills & AI Chat, Vienna & Buying Guide
 
 - **Tier 4 (Menu Bar & Help Suite):** Implemented the universal 8-menu bar (`File`, `Edit`, `View`, `Insert`, `Modify`, `Commands`, `Window`, `Help`) with `egui::MenuBar` `switch_on_hover`, wired hotkeys (`Ctrl+K`, `Ctrl+J`, `F1`, `F5`, `Ctrl+N/O/S/Z/Y`, `Esc` E-stop), and the 5-item Help suite (`Command Palette...`, `Keyboard Shortcuts...`, `Project Files & Docs...`, `Licenses & Notices...`, `About MakerCraft`) backed by `HELP.md`.

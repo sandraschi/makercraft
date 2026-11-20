@@ -11,6 +11,7 @@ pub enum HelpDocTab {
     Usage,
     Tips,
     Pitfalls,
+    PlannedExtensions,
     OtherCrafts,
     Skills,
     FullManual,
@@ -23,6 +24,7 @@ impl HelpDocTab {
         Self::Usage,
         Self::Tips,
         Self::Pitfalls,
+        Self::PlannedExtensions,
         Self::OtherCrafts,
         Self::Skills,
         Self::FullManual,
@@ -36,6 +38,7 @@ impl HelpDocTab {
             Self::Usage => "Usage (GUI/CLI/MCP)",
             Self::Tips => "Tips & Tricks",
             Self::Pitfalls => "Pitfalls & Safety",
+            Self::PlannedExtensions => "Planned Extensions",
             Self::OtherCrafts => "Other Crafts",
             Self::Skills => "Skills (8)",
             Self::FullManual => "HELP.md",
@@ -484,45 +487,69 @@ pub fn render_help_docs_window(
                 .id_salt("help_docs_scroll")
                 .show(ui, |ui| match *active_tab {
                     HelpDocTab::GetStarted => {
-                        ui.strong("1. Get Started (5-Step Tour)");
-                        ui.label("1) Launch MakerCraft: starts on 2D Preview with a reference 3018 CNC square.");
-                        ui.label("2) Pick a profile: 3018 CNC (GRBL 1.1h) or Ender-3 (Klipper/Moonraker).");
-                        ui.label("3) Load G-code via File -> Open G-code... (Ctrl+O) or edit in the G-code tab.");
-                        ui.label("4) Press F5 (Run Safety Lint) to verify envelopes, plunge safety, and feedrates.");
-                        ui.label("5) Inspect hardware diagrams in Machines & Instruments, or press Ctrl+J for AI Chat.");
+                        ui.heading("What MakerCraft Is & Does");
+                        ui.label("MakerCraft is a local-first, pure-Rust digital fabrication bench and electronics instrument studio. It unifies three disconnected maker worlds into one workstation, CLI, and MCP server:");
+                        ui.label("  1. 3D Printing (Ender-3 Klipper, Prusa MK4S, Bambu X1C/P1S, Voron 2.4) with STL mesh preview and filament estimation.");
+                        ui.label("  2. CNC Milling (3018-class GRBL 1.1h) with deterministic G-code safety linting before a bit ever touches stock.");
+                        ui.label("  3. Electronics Bench Instruments (Oscilloscope, Logic Analyzer, Bus Pirate v4, Multimeter, Function Generator, Spectrum Analyzer, JTAG/SWD).");
+                        ui.add_space(8.0);
+                        ui.strong("5-Step Walkthrough");
+                        ui.label("1) Open the Dashboard tab: review bench readiness, pick a Handholding Guide, or track builds on the SQLite Kanban.");
+                        ui.label("2) Pick your machine profile in the left sidebar (3018 CNC, Ender-3, Prusa MK4S, Bambu X1C, or Voron 2.4) and material (PLA/PETG/ABS/TPU).");
+                        ui.label("3) Drag-and-drop any .gcode or .stl file onto the window (or use File -> Open / Insert -> Sample) to inspect it in 3D Orbit or 2D XY.");
+                        ui.label("4) Press F5 (Run Safety Lint) to verify bed envelopes, rapid-plunge blocks, depth limits, and feedrates.");
+                        ui.label("5) Open the Workshop tab to click & probe hardware stations, Vienna & Buying for local workshops + hardware matrices, or Ctrl+J for the AI Bench Assistant.");
                     }
                     HelpDocTab::Functions => {
-                        ui.strong("2. Core Functions & Architecture");
-                        ui.label("- makercraft-core: Modal G-code parser (G0/G1/G90/G91/G20/G21/G2/G3), safety linter, job estimator, 8 bundled skills.");
-                        ui.label("- makercraft-hal: Moonraker HTTP, GRBL serial, Bus Pirate, SCPI/USBTMC scope, sigrok logic analyzer.");
-                        ui.label("- makercraft-mcp: Unified CLI + MCP 2024-11-05 stdio server (18 tools + skill:// resources).");
-                        ui.label("- makercraft-app: Pure-Rust egui workstation with pictorial hardware studio and local-first AI chat.");
+                        ui.heading("Core Architecture & Modules");
+                        ui.label("- makercraft-core (L1): Modal G-code parser (G0/G1, G2/G3 I/J circular arc tessellation, G90/G91, G20/G21), deterministic safety linter, job time/travel estimator, filament usage/cost estimator, ASCII/binary STL parser, 5 machine profiles, and 8 embedded skills.");
+                        ui.label("- makercraft-hal (L1): Hardware abstraction drivers for Moonraker HTTP (printer_live), GRBL serial (cnc_probe), Bus Pirate (bus_probe), SCPI TCP & USBTMC scopes (scope_idn, scope_usb), sigrok-cli logic analyzers (logic_usb, logic_capture), and 7 instrument_capture demo sources.");
+                        ui.label("- makercraft-mcp (L2): Unified CLI + MCP 2024-11-05 stdio server (18 tools + skill:// resources + skills list/show/export).");
+                        ui.label("- makercraft-app (L3): Pure-Rust egui 0.37 workstation with 3D Orbit/STL viewer, G-code syntax highlighting, Z-layer scrubber, animated Workshop panorama, SQLite Kanban, Buying Decision Matrices, and local-first AI Chat Dock.");
                     }
                     HelpDocTab::Usage => {
-                        ui.strong("3. Usage (GUI, CLI & MCP)");
-                        ui.monospace("makercraft-cli status\nmakercraft-cli lint sample.gcode --profile printer\nmakercraft-cli check sample.gcode\nmakercraft-mcp instrument-sources\nmakercraft-mcp instrument-capture oscilloscope --dir %TEMP%\\captures\nmakercraft-mcp skills list\nmakercraft-mcp mcp");
+                        ui.heading("Usage Across GUI, CLI & MCP");
+                        ui.strong("Desktop GUI Shortcuts");
+                        ui.label("Ctrl+K: Command Palette | Ctrl+J: AI Chat Dock | F5: Safety Lint | F1: Shortcuts | Esc: Latch E-Stop | Drag-and-drop: Load .gcode or .stl");
+                        ui.add_space(6.0);
+                        ui.strong("CLI Commands (makercraft-cli / makercraft-mcp)");
+                        ui.monospace("makercraft-cli status\nmakercraft-cli lint part.gcode --profile prusa\nmakercraft-cli check part.gcode --profile cnc   # exits 2 when unsafe (CI gate)\nmakercraft-cli estimate part.gcode --profile bambu\nmakercraft-mcp instrument-sources\nmakercraft-mcp instrument-capture oscilloscope --dir %TEMP%\\captures\nmakercraft-mcp skills list\nmakercraft-mcp skills export --to .cursor\\skills\nmakercraft-mcp mcp   # JSON-RPC 2.0 on stdio");
                     }
                     HelpDocTab::Tips => {
-                        ui.strong("4. Tips & Tricks");
-                        ui.label("- Use Ctrl+K (Command Palette) to jump to any tab, probe, or sample G-code.");
-                        ui.label("- Drag-and-drop any .gcode or .stl file directly onto MakerCraft to load and preview it.");
-                        ui.label("- On 3D Orbit Preview, drag to rotate, scroll to zoom, and use Z-Layer Filter for depth passes.");
-                        ui.label("- Run `gcode_check` in CI: it exits with code 2 if passes_safety is false.");
+                        ui.heading("Practical Tips & Tricks");
+                        ui.label("- Use Ctrl+K (Command Palette) and type a partial keyword (like 'workshop', 'scope', or 'lint'), then press Enter to jump immediately.");
+                        ui.label("- Drag-and-drop any .stl part directly onto the window to inspect its geometry on your chosen printer's build plate before slicing.");
+                        ui.label("- In Preview, switch to 2D XY + enable Z-Layer Filter to scrub through individual CNC depth passes or print layers.");
+                        ui.label("- Use `makercraft-cli check <file>` in pre-commit or CI scripts: it exits with code 2 whenever `passes_safety` is false.");
+                        ui.label("- In the Vienna & Buying tab, toggle priorities (Open Firmware, Enclosed, Display-less USB, <= 400 EUR) to re-score printers and scopes.");
                     }
                     HelpDocTab::Pitfalls => {
-                        ui.strong("5. Common Pitfalls & Critical Safety");
-                        ui.colored_label(egui::Color32::from_rgb(255, 135, 135), "- Oscilloscope Ground Clip: Most benchtop scopes have earth-referenced BNC shields. Clipping GND to a non-ground node creates a dead short!");
-                        ui.label("- CNC Rapid Plunge: Never use G0 downward into stock (G0 Z-5). Always rapid to safe Z, then plunge with G1 F150..F300.");
-                        ui.label("- Logic Analyzer Thresholds: Cheap 24 MHz FX2LP clones are NOT 1.8V safe without a level shifter.");
-                        ui.label("- PTFE Hotend Limit: Printing >260 C on PTFE-lined hotends degrades tubing and releases toxic fumes.");
-                        ui.label("- Laser Cutters (Vienna Makerspaces): NEVER cut PVC or vinyl — it produces corrosive chlorine gas.");
+                        ui.heading("Common Pitfalls & Critical Safety");
+                        ui.colored_label(egui::Color32::from_rgb(255, 135, 135), "- Oscilloscope Ground Clip Short: Most benchtop scopes have earth-referenced BNC shields. Clipping GND to anything other than circuit ground (e.g. high-side shunt or mains-referenced node) creates a dead short!");
+                        ui.label("- CNC Rapid Plunge: Never use G0 downward into stock (e.g. G0 Z-5). Always rapid to safe Z, then plunge with G1 F150..F300. MakerCraft flags rapid plunges as hard errors.");
+                        ui.label("- Logic Analyzer Voltage Thresholds: Cheap 24 MHz FX2LP clones expect 2.0V-5.25V and are NOT 1.8V safe without a level shifter.");
+                        ui.label("- PTFE Hotend Thermal Limit: Printing >260 C on PTFE-lined hotends (like stock Ender-3) degrades tubing and releases toxic fumes.");
+                        ui.label("- Vienna Makerspaces Laser Rule: NEVER cut PVC, vinyl, or unknown plastics on a laser cutter — it releases corrosive chlorine gas.");
+                        ui.label("- Bus Pirate Power: Verify target current < 150 mA and match 3.3V vs 5V before enabling onboard power supplies.");
+                    }
+                    HelpDocTab::PlannedExtensions => {
+                        ui.heading("Planned Extensions (MakerCraft Roadmap)");
+                        ui.label("Concrete improvements queued for upcoming releases (v0.3.0+):");
+                        ui.add_space(4.0);
+                        ui.label("1. Live GRBL Jog & G-code Streamer: Interactive X/Y/Z step jog pad, G38.2 Z-probe touchplate, and confirm-gated line-by-line sender.");
+                        ui.label("2. Moonraker Full Object Polling + Upload: Live nozzle/bed history curves, print progress %, and confirm-gated G-code upload/start.");
+                        ui.label("3. OctoPrint, PrusaLink & Marlin Serial Probes: Real HTTP/serial telemetry adapters alongside Moonraker.");
+                        ui.label("4. Live Readings for the 4 File-Only Instruments: Wire SCPI DMM, SCPI Function Generator, Spectrum Sweep, and probe-rs/OpenOCD JTAG/SWD inspect into instrument_capture.");
+                        ui.label("5. Native Tool Calling in Ctrl+J AI Chat: Allow local Ollama/OpenAI models to execute read-only tools directly and show Allow/Deny cards for writes.");
+                        ui.label("6. egui_kittest Golden PNG Snapshots + Tofu Guard: Automated visual regression suite in cargo test.");
                     }
                     HelpDocTab::OtherCrafts => {
-                        ui.strong("5. Other Storytold Craft Apps");
-                        ui.label("- CADCraft: 3D parametric CAD & DXF/STEP/STL export -> mill or slice in MakerCraft.");
-                        ui.label("- RobotCraft: URDF kinematics & Yahboom/VLA robotics (separate from bench/fab).");
-                        ui.label("- DevCraft: Fleet orchestration, git, ports, worktrees.");
-                        ui.label("- RevCraft: Firmware binary reverse engineering.");
+                        ui.heading("Other Storytold Craft Apps (Our Fleet Boundaries)");
+                        ui.label("- RobotCraft: URDF kinematics, Yahboom/VLA robotics, and actuator tele-op (robotics stays in RobotCraft).");
+                        ui.label("- DevCraft: Fleet orchestration, git, ports, and worktrees.");
+                        ui.label("- RevCraft: Firmware binary reverse engineering & Ghidra/binary analysis.");
+                        ui.label("- GameCraft / SplatCraft: 3D scenes and Gaussian splats.");
+                        ui.label("(Upstream Storytold ArtCraft apps like CADCraft/SoundCraft/FilmCraft are external dependencies and are not modified here.)");
                     }
                     HelpDocTab::Skills => {
                         let skills = skills_list();

@@ -817,6 +817,11 @@ impl eframe::App for MakerCraftApp {
                         self.show_docs = true;
                         ui.close();
                     }
+                    if ui.button("Planned Extensions...").clicked() {
+                        self.help_doc_tab = HelpDocTab::PlannedExtensions;
+                        self.show_docs = true;
+                        ui.close();
+                    }
                     if ui.button("Bundled Skills (8)...").clicked() {
                         self.help_doc_tab = HelpDocTab::Skills;
                         self.show_docs = true;

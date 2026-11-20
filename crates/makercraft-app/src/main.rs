@@ -14,7 +14,7 @@ use makercraft_core::{
 };
 use reference_views::{
     render_help_docs_window, render_licenses_window, render_shortcuts_window,
-    render_vienna_and_buying_tab, HelpDocTab,
+    render_vienna_and_buying_tab, BuyingGuideState, HelpDocTab,
 };
 use serde_json::json;
 use viewer3d::{Viewer3dOpts, Viewer3dState};
@@ -126,6 +126,7 @@ pub struct MakerCraftApp {
     file_path_input: String,
     last_probe_json: String,
     selected_station: Option<HardwareKind>,
+    buying_guide: BuyingGuideState,
     dashboard: DashboardState,
     chat: ChatDockState,
 }
@@ -180,6 +181,7 @@ impl MakerCraftApp {
             file_path_input: "sample.gcode".to_string(),
             last_probe_json: String::new(),
             selected_station: Some(HardwareKind::Printer3d),
+            buying_guide: BuyingGuideState::default(),
             dashboard: DashboardState::new(),
             chat: ChatDockState::default(),
         }
@@ -794,15 +796,42 @@ impl eframe::App for MakerCraftApp {
                         self.show_shortcuts = true;
                         ui.close();
                     }
-                    if ui.button("Project Files & Docs...").clicked() {
+                    ui.separator();
+                    if ui.button("Getting Started...").clicked() {
+                        self.help_doc_tab = HelpDocTab::GetStarted;
                         self.show_docs = true;
                         ui.close();
                     }
+                    if ui.button("Usage (GUI, CLI & MCP)...").clicked() {
+                        self.help_doc_tab = HelpDocTab::Usage;
+                        self.show_docs = true;
+                        ui.close();
+                    }
+                    if ui.button("Tips & Tricks...").clicked() {
+                        self.help_doc_tab = HelpDocTab::Tips;
+                        self.show_docs = true;
+                        ui.close();
+                    }
+                    if ui.button("Common Pitfalls & Safety...").clicked() {
+                        self.help_doc_tab = HelpDocTab::Pitfalls;
+                        self.show_docs = true;
+                        ui.close();
+                    }
+                    if ui.button("Bundled Skills (8)...").clicked() {
+                        self.help_doc_tab = HelpDocTab::Skills;
+                        self.show_docs = true;
+                        ui.close();
+                    }
+                    if ui.button("Project Files & Docs...").clicked() {
+                        self.help_doc_tab = HelpDocTab::FullManual;
+                        self.show_docs = true;
+                        ui.close();
+                    }
+                    ui.separator();
                     if ui.button("Licenses & Notices...").clicked() {
                         self.show_licenses = true;
                         ui.close();
                     }
-                    ui.separator();
                     if ui.button("About MakerCraft").clicked() {
                         self.show_about_dialog = true;
                         ui.close();
@@ -1595,7 +1624,7 @@ impl eframe::App for MakerCraftApp {
             }
 
             BenchTab::ViennaBuying => {
-                render_vienna_and_buying_tab(ui);
+                render_vienna_and_buying_tab(ui, &mut self.buying_guide);
             }
 
             BenchTab::Gcode => {

@@ -2,19 +2,22 @@ mod chat_dock;
 mod dashboard;
 mod hardware_viz;
 mod reference_views;
+mod viewer3d;
 
 use chat_dock::ChatDockState;
 use clap::Parser;
 use dashboard::{DashboardAction, DashboardState};
 use hardware_viz::{draw_hardware_diagram, draw_workshop_panorama, HardwareKind, WorkshopAction};
 use makercraft_core::{
-    dispatch, Command, MachineProfile, MakerEngine, ToolpathLintReport, INSTRUMENT_SOURCES,
+    dispatch, estimate_filament, parse_stl, sample_calibration_part_stl, Command, FilamentMaterial,
+    MachineProfile, MakerEngine, StlMesh, ToolpathLintReport, INSTRUMENT_SOURCES,
 };
 use reference_views::{
     render_help_docs_window, render_licenses_window, render_shortcuts_window,
     render_vienna_and_buying_tab, HelpDocTab,
 };
 use serde_json::json;
+use viewer3d::{Viewer3dOpts, Viewer3dState};
 
 #[derive(Parser, Debug)]
 #[command(name = "makercraft", about = "MakerCraft Digital Fabrication Studio")]
@@ -46,6 +49,45 @@ enum BenchTab {
     ViennaBuying,
 }
 
+#[derive(PartialEq, Eq, Clone, Copy)]
+enum ActiveProfile {
+    Cnc3018,
+    Ender3Klipper,
+    PrusaMk4s,
+    BambuX1c,
+    Voron24,
+}
+
+impl ActiveProfile {
+    const ALL: &'static [ActiveProfile] = &[
+        Self::Cnc3018,
+        Self::Ender3Klipper,
+        Self::PrusaMk4s,
+        Self::BambuX1c,
+        Self::Voron24,
+    ];
+
+    fn short_label(self) -> &'static str {
+        match self {
+            Self::Cnc3018 => "3018 CNC",
+            Self::Ender3Klipper => "Ender-3",
+            Self::PrusaMk4s => "Prusa MK4S",
+            Self::BambuX1c => "Bambu X1C",
+            Self::Voron24 => "Voron 2.4",
+        }
+    }
+
+    fn cli_key(self) -> &'static str {
+        match self {
+            Self::Cnc3018 => "cnc",
+            Self::Ender3Klipper => "printer",
+            Self::PrusaMk4s => "prusa",
+            Self::BambuX1c => "bambu",
+            Self::Voron24 => "voron",
+        }
+    }
+}
+
 pub struct MakerCraftApp {
     status_msg: String,
     locale: makercraft_core::i18n::AppLocale,
@@ -53,10 +95,14 @@ pub struct MakerCraftApp {
     undo_stack: Vec<String>,
     redo_stack: Vec<String>,
     active_tab: BenchTab,
-    profile_cnc: bool,
+    active_profile: ActiveProfile,
+    filament_material: FilamentMaterial,
     lint_report: Option<ToolpathLintReport>,
     preview_zoom: f32,
     preview_pan: egui::Vec2,
+    preview_3d: bool,
+    viewer_3d: Viewer3dState,
+    stl_mesh: Option<StlMesh>,
     show_grid: bool,
     show_rapids: bool,
     z_filter_enabled: bool,
@@ -103,10 +149,14 @@ impl MakerCraftApp {
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
             active_tab: BenchTab::Preview,
-            profile_cnc: true,
+            active_profile: ActiveProfile::Cnc3018,
+            filament_material: FilamentMaterial::Pla,
             lint_report,
             preview_zoom: 1.0,
             preview_pan: egui::Vec2::ZERO,
+            preview_3d: true,
+            viewer_3d: Viewer3dState::default(),
+            stl_mesh: Some(sample_calibration_part_stl()),
             show_grid: true,
             show_rapids: true,
             z_filter_enabled: false,
@@ -234,10 +284,12 @@ impl MakerCraftApp {
     }
 
     fn profile(&self) -> MachineProfile {
-        if self.profile_cnc {
-            MachineProfile::default_cnc()
-        } else {
-            MachineProfile::default_printer()
+        match self.active_profile {
+            ActiveProfile::Cnc3018 => MachineProfile::default_cnc(),
+            ActiveProfile::Ender3Klipper => MachineProfile::default_printer(),
+            ActiveProfile::PrusaMk4s => MachineProfile::prusa_mk4s(),
+            ActiveProfile::BambuX1c => MachineProfile::bambu_x1c(),
+            ActiveProfile::Voron24 => MachineProfile::voron_24(),
         }
     }
 
@@ -430,20 +482,50 @@ impl eframe::App for MakerCraftApp {
                 .request_repaint_after(std::time::Duration::from_millis(60));
         }
 
-        // Drag-and-drop G-code file loading
+        // Drag-and-drop G-code or STL file loading
         let dropped = ui.ctx().input(|i| i.raw.dropped_files.clone());
         for file in dropped {
             let path = file.path();
             if !path.as_os_str().is_empty() {
-                match std::fs::read_to_string(path) {
-                    Ok(contents) => {
-                        self.file_path_input = path.to_string_lossy().to_string();
-                        self.set_gcode(contents);
-                        self.active_tab = BenchTab::Preview;
-                        self.status_msg = format!("Dropped & loaded {}", path.display());
+                let is_stl = path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .map(|e| e.eq_ignore_ascii_case("stl"))
+                    .unwrap_or(false);
+                if is_stl {
+                    match std::fs::read(path) {
+                        Ok(bytes) => {
+                            let name = path
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or("part.stl");
+                            match parse_stl(name, &bytes) {
+                                Ok(mesh) => {
+                                    self.status_msg = format!(
+                                        "Loaded STL {} ({} tris)",
+                                        mesh.name,
+                                        mesh.triangles.len()
+                                    );
+                                    self.stl_mesh = Some(mesh);
+                                    self.preview_3d = true;
+                                    self.active_tab = BenchTab::Preview;
+                                }
+                                Err(e) => self.status_msg = format!("STL parse failed: {e}"),
+                            }
+                        }
+                        Err(e) => self.status_msg = format!("Drop STL failed: {e}"),
                     }
-                    Err(e) => {
-                        self.status_msg = format!("Drop failed: {e}");
+                } else {
+                    match std::fs::read_to_string(path) {
+                        Ok(contents) => {
+                            self.file_path_input = path.to_string_lossy().to_string();
+                            self.set_gcode(contents);
+                            self.active_tab = BenchTab::Preview;
+                            self.status_msg = format!("Dropped & loaded {}", path.display());
+                        }
+                        Err(e) => {
+                            self.status_msg = format!("Drop failed: {e}");
+                        }
                     }
                 }
             }
@@ -512,7 +594,7 @@ impl eframe::App for MakerCraftApp {
                     if ui.button("Export Lint Report JSON").clicked() {
                         let cmd = Command::GcodeLint {
                             gcode: self.gcode_buffer.clone(),
-                            profile: if self.profile_cnc { "cnc" } else { "printer" }.to_string(),
+                            profile: self.active_profile.cli_key().to_string(),
                         };
                         self.run_command("Export Lint JSON", cmd);
                         self.active_tab = BenchTab::Safety;
@@ -586,13 +668,13 @@ impl eframe::App for MakerCraftApp {
                         ui.close();
                     }
                     if ui.button("Sample CNC Arc (G2 Circle)").clicked() {
-                        self.profile_cnc = true;
+                        self.active_profile = ActiveProfile::Cnc3018;
                         self.set_gcode("G90\nG21\nG0 Z25.0 F3000\nG0 X80 Y50\nG1 Z-1.0 F300\nG2 X80 Y50 I-30 J0 F900\nG0 Z25\nM2".to_string());
                         self.active_tab = BenchTab::Preview;
                         ui.close();
                     }
                     if ui.button("Sample Printer Calibration Frame").clicked() {
-                        self.profile_cnc = false;
+                        self.active_profile = ActiveProfile::Ender3Klipper;
                         self.set_gcode("G90\nG21\nM104 S205\nM140 S60\nG0 Z0.3 F3000\nG1 X20 Y20 F1500\nG1 X120 Y20 E4.0\nG1 X120 Y120 E8.0\nG1 X20 Y120 E12.0\nG1 X20 Y20 E16.0\nG0 Z20\nM104 S0\nM140 S0\nM2".to_string());
                         self.active_tab = BenchTab::Preview;
                         ui.close();
@@ -606,15 +688,12 @@ impl eframe::App for MakerCraftApp {
                 });
 
                 ui.menu_button("Modify", |ui| {
-                    if ui.button("Profile: 3018 CNC (GRBL 1.1h)").clicked() {
-                        self.profile_cnc = true;
-                        self.analyze();
-                        ui.close();
-                    }
-                    if ui.button("Profile: Ender-3 Printer (Klipper)").clicked() {
-                        self.profile_cnc = false;
-                        self.analyze();
-                        ui.close();
+                    for prof in ActiveProfile::ALL {
+                        if ui.button(format!("Profile: {}", prof.short_label())).clicked() {
+                            self.active_profile = *prof;
+                            self.analyze();
+                            ui.close();
+                        }
                     }
                     ui.separator();
                     if ui.button("Prepend Work Zero (G92 X0 Y0 Z0)").clicked() {
@@ -791,14 +870,15 @@ impl eframe::App for MakerCraftApp {
                         .strong()
                         .color(GOLD),
                 );
-                ui.horizontal(|ui| {
-                    if ui.selectable_label(self.profile_cnc, "3018 CNC").clicked() {
-                        self.profile_cnc = true;
-                        self.analyze();
-                    }
-                    if ui.selectable_label(!self.profile_cnc, "Ender-3").clicked() {
-                        self.profile_cnc = false;
-                        self.analyze();
+                ui.horizontal_wrapped(|ui| {
+                    for prof in ActiveProfile::ALL {
+                        if ui
+                            .selectable_label(self.active_profile == *prof, prof.short_label())
+                            .clicked()
+                        {
+                            self.active_profile = *prof;
+                            self.analyze();
+                        }
                     }
                 });
                 let p = self.profile();
@@ -807,9 +887,30 @@ impl eframe::App for MakerCraftApp {
                         "{:.0}x{:.0}x{:.0}mm | max {:.0}mm/min",
                         p.bed_x_mm, p.bed_y_mm, p.max_z_mm, p.max_feedrate_mm_min
                     ))
-                    .size(15.0)
+                    .size(14.5)
                     .color(MIST),
                 );
+                if p.kind == makercraft_core::ProfileKind::Printer {
+                    egui::ComboBox::from_id_salt("filament_material_combo")
+                        .selected_text(self.filament_material.label())
+                        .show_ui(ui, |ui| {
+                            for m in FilamentMaterial::ALL {
+                                if ui
+                                    .selectable_value(&mut self.filament_material, *m, m.label())
+                                    .clicked()
+                                {
+                                    self.status_msg = format!("Material: {}", m.label());
+                                }
+                            }
+                        });
+                    let est = estimate_filament(&self.gcode_buffer, self.filament_material);
+                    if est.length_mm > 0.0 {
+                        ui.small(format!(
+                            "Filament: {:.1} mm ({:.2} g | ~{:.2} EUR)",
+                            est.length_mm, est.weight_g, est.est_cost_eur
+                        ));
+                    }
+                }
                 ui.separator();
                 ui.label(
                     egui::RichText::new("Active Hardware")
@@ -942,26 +1043,26 @@ impl eframe::App for MakerCraftApp {
                 let lint = self.lint_report.clone();
                 match self.dashboard.ui(ui, &profile_name, estop, lint.as_ref()) {
                     DashboardAction::LoadSafeCnc => {
-                        self.profile_cnc = true;
+                        self.active_profile = ActiveProfile::Cnc3018;
                         self.set_gcode("G90\nG21\nG0 Z25.0 F3000\nG1 X20 Y20 F1200\nG1 Z-1.0 F300\nG1 X80 Y20\nG1 X80 Y80\nG1 X20 Y80\nG1 X20 Y20\nG0 Z25\nM2".to_string());
                         self.status_msg = "Loaded Safe 3018 CNC Square".to_string();
                     }
                     DashboardAction::LoadBadPlungeDemo => {
-                        self.profile_cnc = true;
+                        self.active_profile = ActiveProfile::Cnc3018;
                         self.set_gcode("G90\nG21\nG0 X20 Y20\nG0 Z-5.0\nG1 X80 Y20 F1200\nM2".to_string());
                         self.active_tab = BenchTab::Safety;
                     }
                     DashboardAction::LoadPrinterCalibration => {
-                        self.profile_cnc = false;
+                        self.active_profile = ActiveProfile::Ender3Klipper;
                         self.set_gcode("G90\nG21\nM104 S205\nM140 S60\nG0 Z0.3 F3000\nG1 X20 Y20 F1500\nG1 X120 Y20 E4.0\nG1 X120 Y120 E8.0\nG1 X20 Y120 E12.0\nG1 X20 Y20 E16.0\nG0 Z20\nM104 S0\nM140 S0\nM2".to_string());
                         self.status_msg = "Loaded Klipper Calibration Frame".to_string();
                     }
                     DashboardAction::SelectCncProfile => {
-                        self.profile_cnc = true;
+                        self.active_profile = ActiveProfile::Cnc3018;
                         self.analyze();
                     }
                     DashboardAction::SelectPrinterProfile => {
-                        self.profile_cnc = false;
+                        self.active_profile = ActiveProfile::Ender3Klipper;
                         self.analyze();
                     }
                     DashboardAction::RunLint => {
@@ -1104,18 +1205,42 @@ impl eframe::App for MakerCraftApp {
                 });
             }
             BenchTab::Preview => {
-                big_heading(ui, "2D Toolpath Preview");
-                body_text(ui, "Top-down XY. Teal = feed cut, red = rapid travel. Wheel zooms, drag pans.");
-                ui.horizontal(|ui| {
-                    if ui.button("Zoom -").clicked() {
-                        self.preview_zoom = (self.preview_zoom / 1.25).clamp(0.25, 8.0);
+                big_heading(ui, if self.preview_3d { "3D Part & Toolpath Viewer" } else { "2D Toolpath Preview" });
+                body_text(
+                    ui,
+                    if self.preview_3d {
+                        "Drag to orbit, wheel to zoom. Drop any .gcode or .stl file onto the window to load."
+                    } else {
+                        "Top-down XY. Teal = feed cut, red = rapid travel. Wheel zooms, drag pans."
+                    },
+                );
+                ui.horizontal_wrapped(|ui| {
+                    if ui.selectable_label(self.preview_3d, "3D Orbit").clicked() {
+                        self.preview_3d = true;
                     }
-                    if ui.button("Fit").clicked() {
+                    if ui.selectable_label(!self.preview_3d, "2D XY").clicked() {
+                        self.preview_3d = false;
+                    }
+                    ui.separator();
+                    if ui.button("Fit / Reset").clicked() {
                         self.preview_zoom = 1.0;
                         self.preview_pan = egui::Vec2::ZERO;
+                        self.viewer_3d.reset();
                     }
-                    if ui.button("Zoom +").clicked() {
-                        self.preview_zoom = (self.preview_zoom * 1.25).clamp(0.25, 8.0);
+                    if !self.preview_3d {
+                        if ui.button("Zoom -").clicked() {
+                            self.preview_zoom = (self.preview_zoom / 1.25).clamp(0.25, 8.0);
+                        }
+                        if ui.button("Zoom +").clicked() {
+                            self.preview_zoom = (self.preview_zoom * 1.25).clamp(0.25, 8.0);
+                        }
+                    }
+                    if ui.button("Sample 3D STL").clicked() {
+                        self.stl_mesh = Some(sample_calibration_part_stl());
+                        self.preview_3d = true;
+                    }
+                    if self.stl_mesh.is_some() && ui.button("Clear STL").clicked() {
+                        self.stl_mesh = None;
                     }
                     if let Some(r) = &self.lint_report {
                         ui.label(
@@ -1123,7 +1248,7 @@ impl eframe::App for MakerCraftApp {
                                 "{} segs | {:.0}mm | ~{:.1}min",
                                 r.segment_count, r.travel_distance_mm, r.estimated_minutes
                             ))
-                            .size(16.0)
+                            .size(15.0)
                             .color(GOLD),
                         );
                     }
@@ -1138,8 +1263,32 @@ impl eframe::App for MakerCraftApp {
                                 .text("Max Z mm"),
                         );
                     }
+                    if let Some(m) = &self.stl_mesh {
+                        ui.small(format!("STL: {} ({} tris)", m.name, m.triangles.len()));
+                    }
                 });
                 ui.add_space(4.0);
+                if self.preview_3d {
+                    let (rect, _) = ui.allocate_exact_size(
+                        egui::vec2(ui.available_width(), 440.0),
+                        egui::Sense::hover(),
+                    );
+                    let toolpath = MakerEngine::preview_segments(&self.gcode_buffer).ok();
+                    let prof = self.profile();
+                    self.viewer_3d.draw(
+                        ui,
+                        rect,
+                        &prof,
+                        toolpath.as_ref(),
+                        self.stl_mesh.as_ref(),
+                        Viewer3dOpts {
+                            show_grid: self.show_grid,
+                            show_rapids: self.show_rapids,
+                            z_filter_enabled: self.z_filter_enabled,
+                            z_filter_max: self.z_filter_max,
+                        },
+                    );
+                } else {
                 let (rect, response) = ui.allocate_exact_size(
                     egui::vec2(ui.available_width(), 420.0),
                     egui::Sense::click_and_drag(),
@@ -1249,6 +1398,7 @@ impl eframe::App for MakerCraftApp {
                             MIST,
                         );
                     }
+                }
                 }
                 ui.add_space(6.0);
                 body_text(ui, "Green = start, white = end. Red rapids must stay above safe Z.");

@@ -78,6 +78,48 @@ impl MachineProfile {
         }
     }
 
+    pub fn prusa_mk4s() -> Self {
+        Self {
+            name: "Prusa MK4S (PrusaLink/Marlin)".to_string(),
+            kind: ProfileKind::Printer,
+            bed_x_mm: 250.0,
+            bed_y_mm: 210.0,
+            max_z_mm: 220.0,
+            max_feedrate_mm_min: 12000.0,
+            safe_z_mm: 10.0,
+            max_cut_depth_mm: 0.0,
+            max_nozzle_temp_c: 290.0,
+        }
+    }
+
+    pub fn bambu_x1c() -> Self {
+        Self {
+            name: "Bambu Lab X1C/P1S (CoreXY)".to_string(),
+            kind: ProfileKind::Printer,
+            bed_x_mm: 256.0,
+            bed_y_mm: 256.0,
+            max_z_mm: 256.0,
+            max_feedrate_mm_min: 18000.0,
+            safe_z_mm: 10.0,
+            max_cut_depth_mm: 0.0,
+            max_nozzle_temp_c: 300.0,
+        }
+    }
+
+    pub fn voron_24() -> Self {
+        Self {
+            name: "Voron 2.4 350 (Klipper CoreXY)".to_string(),
+            kind: ProfileKind::Printer,
+            bed_x_mm: 350.0,
+            bed_y_mm: 350.0,
+            max_z_mm: 330.0,
+            max_feedrate_mm_min: 18000.0,
+            safe_z_mm: 10.0,
+            max_cut_depth_mm: 0.0,
+            max_nozzle_temp_c: 310.0,
+        }
+    }
+
     pub fn default_cnc() -> Self {
         Self {
             name: "3018 class (GRBL 1.1h)".to_string(),
@@ -826,7 +868,274 @@ pub fn pick_profile(name: &str) -> MachineProfile {
     let lower = name.to_lowercase();
     match lower.as_str() {
         "printer" | "ender-3" | "ender3" | "ender_3" => MachineProfile::default_printer(),
+        "prusa" | "mk4" | "mk4s" | "prusa_mk4s" => MachineProfile::prusa_mk4s(),
+        "bambu" | "x1c" | "p1s" | "bambu_x1c" => MachineProfile::bambu_x1c(),
+        "voron" | "voron24" | "voron_24" => MachineProfile::voron_24(),
         _ => MachineProfile::default_cnc(),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FilamentMaterial {
+    Pla,
+    Petg,
+    AbsAsa,
+    Tpu95a,
+}
+
+impl FilamentMaterial {
+    pub const ALL: &'static [FilamentMaterial] =
+        &[Self::Pla, Self::Petg, Self::AbsAsa, Self::Tpu95a];
+
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Pla => "PLA (205C / 60C)",
+            Self::Petg => "PETG (235C / 75C)",
+            Self::AbsAsa => "ABS/ASA (255C / 100C, Enclosed)",
+            Self::Tpu95a => "TPU 95A (225C / 50C, Slow)",
+        }
+    }
+
+    #[must_use]
+    pub fn density_g_cm3(self) -> f64 {
+        match self {
+            Self::Pla => 1.24,
+            Self::Petg => 1.27,
+            Self::AbsAsa => 1.04,
+            Self::Tpu95a => 1.21,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FilamentEstimate {
+    pub length_mm: f64,
+    pub weight_g: f64,
+    pub est_cost_eur: f64,
+}
+
+/// Estimate 1.75 mm filament usage from G-code `E` words (supports M82/M83).
+#[must_use]
+pub fn estimate_filament(gcode: &str, mat: FilamentMaterial) -> FilamentEstimate {
+    let mut relative_e = false;
+    let mut cur_e = 0.0_f64;
+    let mut total_e = 0.0_f64;
+    for raw in gcode.lines() {
+        let line = raw.split(';').next().unwrap_or("").trim();
+        if line.is_empty() {
+            continue;
+        }
+        let up = line.to_ascii_uppercase();
+        if up.starts_with("M83") {
+            relative_e = true;
+            continue;
+        }
+        if up.starts_with("M82") {
+            relative_e = false;
+            continue;
+        }
+        if up.starts_with("G92") {
+            for tok in up.split_whitespace() {
+                if let Some(rest) = tok.strip_prefix('E') {
+                    if let Ok(v) = rest.parse::<f64>() {
+                        cur_e = v;
+                    }
+                }
+            }
+            continue;
+        }
+        if up.starts_with("G0") || up.starts_with("G1") {
+            for tok in up.split_whitespace() {
+                if let Some(rest) = tok.strip_prefix('E') {
+                    if let Ok(v) = rest.parse::<f64>() {
+                        if relative_e {
+                            if v > 0.0 {
+                                total_e += v;
+                            }
+                        } else {
+                            if v > cur_e {
+                                total_e += v - cur_e;
+                            }
+                            cur_e = v;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let area_mm2 = std::f64::consts::PI * (1.75_f64 / 2.0).powi(2);
+    let volume_cm3 = (total_e * area_mm2) / 1000.0;
+    let weight_g = volume_cm3 * mat.density_g_cm3();
+    let est_cost_eur = (weight_g / 1000.0) * 22.0;
+    FilamentEstimate {
+        length_mm: total_e,
+        weight_g,
+        est_cost_eur,
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct StlTriangle {
+    pub normal: [f32; 3],
+    pub verts: [[f32; 3]; 3],
+}
+
+#[derive(Debug, Clone)]
+pub struct StlMesh {
+    pub name: String,
+    pub triangles: Vec<StlTriangle>,
+    pub min: [f32; 3],
+    pub max: [f32; 3],
+}
+
+/// Parse either binary or ASCII STL bytes without panicking.
+pub fn parse_stl(name: &str, bytes: &[u8]) -> Result<StlMesh, MakerError> {
+    if bytes.len() < 15 {
+        return Err(MakerError::Parse("STL file too small".to_string()));
+    }
+    let looks_ascii = bytes.starts_with(b"solid")
+        && std::str::from_utf8(&bytes[..bytes.len().min(512)])
+            .map(|s| s.contains("facet"))
+            .unwrap_or(false);
+
+    let mut tris = Vec::new();
+    if looks_ascii {
+        let text = std::str::from_utf8(bytes)
+            .map_err(|_| MakerError::Parse("invalid UTF-8 in ASCII STL".to_string()))?;
+        let mut cur_norm = [0.0_f32, 0.0, 1.0];
+        let mut cur_verts: Vec<[f32; 3]> = Vec::with_capacity(3);
+        for line in text.lines() {
+            let trimmed = line.trim();
+            if let Some(rest) = trimmed.strip_prefix("facet normal") {
+                let nums: Vec<f32> = rest
+                    .split_whitespace()
+                    .filter_map(|t| t.parse::<f32>().ok())
+                    .collect();
+                if nums.len() == 3 {
+                    cur_norm = [nums[0], nums[1], nums[2]];
+                }
+                cur_verts.clear();
+            } else if let Some(rest) = trimmed.strip_prefix("vertex") {
+                let nums: Vec<f32> = rest
+                    .split_whitespace()
+                    .filter_map(|t| t.parse::<f32>().ok())
+                    .collect();
+                if nums.len() == 3 {
+                    cur_verts.push([nums[0], nums[1], nums[2]]);
+                    if cur_verts.len() == 3 {
+                        tris.push(StlTriangle {
+                            normal: cur_norm,
+                            verts: [cur_verts[0], cur_verts[1], cur_verts[2]],
+                        });
+                        cur_verts.clear();
+                    }
+                }
+            }
+        }
+    } else if bytes.len() >= 84 {
+        let count = u32::from_le_bytes([bytes[80], bytes[81], bytes[82], bytes[83]]) as usize;
+        let max_count = (bytes.len() - 84) / 50;
+        let actual = count.min(max_count);
+        tris.reserve(actual);
+        let read_f32 = |off: usize| -> f32 {
+            f32::from_le_bytes([bytes[off], bytes[off + 1], bytes[off + 2], bytes[off + 3]])
+        };
+        for i in 0..actual {
+            let base = 84 + i * 50;
+            let normal = [read_f32(base), read_f32(base + 4), read_f32(base + 8)];
+            let v0 = [
+                read_f32(base + 12),
+                read_f32(base + 16),
+                read_f32(base + 20),
+            ];
+            let v1 = [
+                read_f32(base + 24),
+                read_f32(base + 28),
+                read_f32(base + 32),
+            ];
+            let v2 = [
+                read_f32(base + 36),
+                read_f32(base + 40),
+                read_f32(base + 44),
+            ];
+            tris.push(StlTriangle {
+                normal,
+                verts: [v0, v1, v2],
+            });
+        }
+    }
+    if tris.is_empty() {
+        return Err(MakerError::Parse("no triangles found in STL".to_string()));
+    }
+    let mut min = [f32::INFINITY; 3];
+    let mut max = [f32::NEG_INFINITY; 3];
+    for t in &tris {
+        for v in &t.verts {
+            for ax in 0..3 {
+                min[ax] = min[ax].min(v[ax]);
+                max[ax] = max[ax].max(v[ax]);
+            }
+        }
+    }
+    Ok(StlMesh {
+        name: name.to_string(),
+        triangles: tris,
+        min,
+        max,
+    })
+}
+
+/// Built-in 40x40x25 mm stepped calibration block STL for 3D preview demos.
+#[must_use]
+pub fn sample_calibration_part_stl() -> StlMesh {
+    let mut tris = Vec::new();
+    let mut add_box = |x0: f32, y0: f32, z0: f32, x1: f32, y1: f32, z1: f32| {
+        let faces: [([f32; 3], [[f32; 3]; 4]); 6] = [
+            (
+                [0.0, 0.0, 1.0],
+                [[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]],
+            ),
+            (
+                [0.0, 0.0, -1.0],
+                [[x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [x1, y0, z0]],
+            ),
+            (
+                [0.0, -1.0, 0.0],
+                [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]],
+            ),
+            (
+                [0.0, 1.0, 0.0],
+                [[x0, y1, z0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0]],
+            ),
+            (
+                [-1.0, 0.0, 0.0],
+                [[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]],
+            ),
+            (
+                [1.0, 0.0, 0.0],
+                [[x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1]],
+            ),
+        ];
+        for (normal, q) in faces {
+            tris.push(StlTriangle {
+                normal,
+                verts: [q[0], q[1], q[2]],
+            });
+            tris.push(StlTriangle {
+                normal,
+                verts: [q[0], q[2], q[3]],
+            });
+        }
+    };
+    // Base plate + upper boss (like a stepped MakerCraft test block)
+    add_box(80.0, 80.0, 0.0, 140.0, 140.0, 12.0);
+    add_box(95.0, 95.0, 12.0, 125.0, 125.0, 28.0);
+    StlMesh {
+        name: "Calibration Block (60x60x28mm)".to_string(),
+        triangles: tris,
+        min: [80.0, 80.0, 0.0],
+        max: [140.0, 140.0, 28.0],
     }
 }
 

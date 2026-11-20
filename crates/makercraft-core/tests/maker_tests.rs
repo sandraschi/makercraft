@@ -227,3 +227,21 @@ fn test_g2_g3_arc_interpolation() {
     // Full circle r=20 circumference ~ 125.66mm + XY/Z moves
     assert!(report.travel_distance_mm > 150.0);
 }
+
+#[test]
+fn test_printer_profiles_filament_and_stl() {
+    assert!(pick_profile("prusa").bed_x_mm > 240.0);
+    assert!(pick_profile("bambu").bed_x_mm > 250.0);
+    assert!(pick_profile("voron").bed_x_mm > 340.0);
+
+    let gcode = "G21\nG90\nG1 X50 Y50 E10.0 F1500\nG1 X100 Y50 E25.0\nM2";
+    let est = makercraft_core::estimate_filament(gcode, makercraft_core::FilamentMaterial::Pla);
+    assert!((est.length_mm - 25.0).abs() < 1e-6);
+    assert!(est.weight_g > 0.0);
+
+    let cube = makercraft_core::sample_calibration_part_stl();
+    assert_eq!(cube.triangles.len(), 24);
+    let ascii_stl = b"solid tri\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 10 0 0\nvertex 0 10 0\nendloop\nendfacet\nendsolid tri\n";
+    let parsed = makercraft_core::parse_stl("tri.stl", ascii_stl).expect("ascii stl");
+    assert_eq!(parsed.triangles.len(), 1);
+}
